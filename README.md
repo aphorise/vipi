@@ -1,5 +1,5 @@
 # `V`isitor `IP` `I`nfo (`vipi`)
-###### Relevant [**licenses**] should be properly considered in commercial and none free uses cases / environments.
+###### Relevant [**licenses**] should be properly considered in commercial and none free use cases / environments.
 
 `vipi` is a [**`Node.js`**] utility leveraging [_`Maxmind`_] *__GeoIP__* *DB* files as well [**`npm maxmind`**] to  provide known info of each `IP`'s:
  - Location (Country, City, etc)
@@ -8,9 +8,9 @@
 
 `vipi` is a standalone command-line-interface (CLI) utility and it may also serve as a HTTP server / web daemon mode.
 
-The intent with this utility is to provide dual log stores that are in **C**omman-**L**og-**F**ormat ([**CLF**]) and JSON contextual to application and user requirements. Session specific information can be stored and read using automatically named files and or to a specific file.
+The intent with this utility is to provide dual log stores in **C**omman-**L**og-**F**ormat ([**CLF**]) and **JSON** contextual to application and user requirements. Session specific information can be stored and read using automatically named files and or to other another stipulated filename.
 
-All available functionality and features - by way of CLI arguments / parameters or query-strings (get-parameters) in daemon mode are documented herein.
+All available functionality and features that are by way of CLI options / arguments. or query-strings (get-parameters) in daemon mode, are documented herein.
 
 ## Installation
 ### npm 
@@ -37,7 +37,7 @@ vipi --help
 
 ## Usage
 
-Once installed `vipi` can be used as standalone command to execute or further extended as module in your `Node.js` script / project.
+Once installed `vipi` can be used as a standalone command to execute or further extended as module in your `Node.js` script / project.
 
 ### `shell` / Command Line Interface (CLI)
 
@@ -73,7 +73,7 @@ vipi 208.67.222.222 -sf=S3141_user -skc='200 "GET / HTTP/1.1" -sko='{"x":9}'
 # log OBJ & CLF to specified file 'S3141_user' session file(s)
 ```
 
-Logs are savd to the specified absolute or relative path from which it is executed (`pwd` / `cwd`).
+Logs are saved to the absolute specified or relative path from which execution occured (`pwd` / `cwd`).
 
 
 ### `daemon` / HTTP Server
@@ -124,7 +124,7 @@ Usage (?!_=...):
 	!_xi,	!_xinfo			Show OS / Node.js / Maxmind DB related info & exit.
 ```
 
-Requests made to the server are by way of **Quiry-String**(s) / **Get-Parameter**(s) which are prefixed with **`!_`**. When in default non-referral mode - the `!_=` parameter is used to pass the `IP` being quired.
+Requests made to the server are by way of **Quiry-String**(s) / **Get-Parameter**(s) which are prefixed with **`!_`**. When in default non-referral mode(s) - the `!_=` parameter is used to pass the `IP` being quired.
 
 ```shell
 curl '127.0.0.1:59999/?!_=208.67.222.222' 	# will output:
@@ -177,7 +177,7 @@ Using `vipi` as an `npm` module is also possible. It ships with the following av
 
 | function | Description |
 | ------------- |:-------------:|
-| `.lookup(IPs, true)` | Performs lookup based on String to Array of `IP`'s passed, the 2nd parameter, where passed, is to enable distance calculation between pairs. |
+| `.lookup(IPs, true)` | Performs lookup based on String to Array of `IP`'s passed, the 2nd parameter where passed enables distance calculations between pairs. |
 | `.enableupdates(Hours)` | Enables automatic update checks every 24 Hours where no value is passed |
 
 Simple example:
