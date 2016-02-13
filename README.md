@@ -209,8 +209,7 @@ Other quiried requests which do not result in an error are not returned; this sh
 ### Performance
 
 A performance of `~` `100,000` to `300,000` lookups per second can be expected in non-daemon / http modes with most modern (2015) `x64` computers subject to available resources including the `node.js` version, hardware specification such as `DDR` as well as other architectural consideration.
-Daemon / http mode - are limited by the asynchronous and single process nature of node and as such and any concurrency beyond `100,000` is highly unlikely and advised; 
-for greater concurrent volumes of lookups consider load-balancing / running multiple version of the service.
+Daemon / http mode - are limited by the asynchronous and single process nature of `Node.js` and so any concurrency beyond `100,000` is unlikely and advised against; for greater concurrent volumes of lookups consider load-balancing / running multiple version of the service.
 
 
 ### Benchmarking
