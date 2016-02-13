@@ -3,18 +3,78 @@ var UID = undefined; /**shorthand undefined*/
 var EOL="\n"; var TAB="\t";
 var f_SysT1=Date.now()/1000; //start time for measuring init times
 var sPROJECT="vipi";
-var sVERSION = "v0.0.1";
+var sVERSION = "v0.0.2";
+var bQuiet = false;
+var bNoReturn = false; /* MODE: -dno || --dnooutput (7) */
+var mVIPIFS, mVIPIFILES, mMAX, mMAXTZ, mPATH, mFS, mHTTP, mURL, mOS, mPS; // npm module references
+try
+{
+	mPATH = require("path");
+	mOS = require("os");
+	mFS = require("fs");
+	mURL = require("url");
+	mMAX = require("maxmind");
+	mMAXTZ = require("maxmind/lib/time_zone");
+	mVIPIFILES = require("./vipi_files");
+	mPS = require("child_process");
+	exports = module.exports =
+	{
+		"lookup" : lookup, "enableupdates" : enableupdates,
+		"quiet" : bQuiet, "noreturn" : bNoReturn
+	};
+}
+catch (e){ console.log("\nERROR: loading: "+sPROJECT+"\n"+e.toString()+"\nDid you NPM install? - Or are you loading DB files from correct path?"); }
+
+/** Regular Expression IndexOf for Arrays or String
+ * Iterates array & returns the index(s) of matches as an array or single integer position; otherwise -1 if not found.
+ * @param reg RegEx reg regular expression to test with. E.g. /-ba/gim
+ * @return Array|Number position of all occurrence(s) or -1 means not found anywhere. */
+Object.defineProperty(Array.prototype, 'indexOfAll',
+{
+	value: function indexOfAll(reg)
+	{
+		var a2Return = [];
+		for (var i in this) { if (this.hasOwnProperty(i)) {if(this[i].toString().match(reg)){ a2Return.push(i);} } }
+		var iL = a2Return.length;
+		return (0 === iL) ? Number(-1) : (1 === iL) ? Number(a2Return[0]) : a2Return;
+	}
+});
+
+/** Zero pads numeric value to required length.
+ * @param num Number|String the meric value to be padded.
+ * @param size Number the required length
+ * @param signed true|false optional indicator for +/- signed
+ * @return String padded value with or without sign
+ * */
+function pad(num, size, signed) { var s = num+""; while (s.length < size) s = "0" + s; return signed ? s : (s > 0 ? "+"+s : "-"+s);}
+
+/** 3 Lettered Zero (0) base array of months. */
+var aMonths = [ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" ];
+
+/** var mNET = require("net"); could use net.isIP(), net.isIPv4() & net.isIPv6() instead of regex */
+/* IP:PORT regex for minimal expected addresses */
+var rgxIP = /^([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])\.([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])\.([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])\.([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])$/;
+var rgxIPPORT = /^([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])\.([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])\.([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])\.([1-9]?\d|1\d\d|2[0-4]\d|25[0-5]):([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/;
+var rgxIPv6 = /^\s*((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:)(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:)))(%.+)?\s*$/;
+var rgxIPv6PORT = /^\s*((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:)(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:)))(%.+)?\s*:([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/;
+
+/** Checks if shell is colour capable. */
 function isTerminal()
-{  //noinspection JSUnresolvedVariable
+{	//noinspection JSUnresolvedVariable
 	return Boolean(process.stdout.isTTY) || (UID !== process.env.TERM && "xterm-256color" === process.env.TERM);
 }
+
+/** true|false whether enviroment output (eg stdio) supports colours */
 var bTTY = isTerminal();
+
 /** strip TTY ANSI colours for no TTY */
 function sRaw(msg) { return bTTY ? msg : msg.replace( /\033\[[0-9;]*m/g, "" ); }
+
+/** Colour strings: Byte escaped (shell) or Stripped for HTTP plain mode - may be extended for HTML colours. */
 /**Red*/var sCR=""; /**Cyan*/ var sCC=""; /**Dark Gray*/ var sCDG=""; /**Green*/ var sCG="";
 /**Natural*/ var sCN=""; /**Natural Bold*/ var sCNB=""; /**Purple*/ var sCP="";
 /**Yellow*/var sCY=""; /**White*/ var sCW=""; /**Red BG + White Text*/ var sCRBG="";
-function setColors()
+function setColours()
 {
 	/**Red*/ sCR=sRaw("\033[31m"); /**Cyan*/ sCC=sRaw("\033[36m");
 	/**Dark Gray*/ sCDG=sRaw("\033[90m"); /**Green*/ sCG=sRaw("\033[32m");
@@ -22,11 +82,9 @@ function setColors()
 	/**Purple*/ sCP=sRaw("\033[35m"); /**Yellow*/ sCY=sRaw("\033[33m");
 	/**White*/ sCW=sRaw("\x1b[37m"); /** Red BG + White Text*/ sCRBG=""+sRaw("\033[41");
 }
-setColors();
-var sL = sCNB + "\n@========================================@" + sCN; /* Line for TUI */
-var sMsgWelcome = sCG + "\nSTARTED " + sCN+sCNB + sPROJECT + " " + sVERSION + sCN + " @ " + new Date() + "\n";
-var sMsgInit = sCP + "System ININT " + sCN+sCNB + "in: " + sCG + "%s" + sCN + " seconds";
-var sEXITs = ["exit", "SIGHUP", "SIGUSR1", "SIGTERM", "SIGPIPE", "SIGINT", "SIGBREAK", "SIGWINCH", "uncaughtException"];
+setColours();
+
+/** general log substitute for console.log and response to HTTP client as well as process exit support */
 function log(msg, exit, res)
 {
 	if (!bHTTP){ if (!bQuiet) {console.log(msg);} }
@@ -35,7 +93,7 @@ function log(msg, exit, res)
 		if (UID !== res)
 		{
 			if (false === res.hasheaderset)
-			{  //noinspection JSUnresolvedFunction
+			{	//noinspection JSUnresolvedFunction
 				res.writeHead(200, oRHeader); res.hasheaderset = true;
 			}
 			//noinspection JSUnresolvedFunction
@@ -50,34 +108,16 @@ var sVOBJ = "_vipi.obj";
 var sVCLF = "_vipi.clf";
 var sUOBJ = "_user.obj";
 var sUCLF = "_user.clf";
-var sDB = __dirname +"/dbs/";
+var sDB = process.cwd()+"/vipi_dbs/";
 var aDBs = ["GeoIPASNum.dat", "GeoIPASNumv6.dat", "GeoLiteCity.dat", "GeoLiteCityv6.dat", "GeoIP.dat", "GeoIPv6.dat"];
 var aDBsVs = ["0", "0", "0", "0", "0", "0"];
-var mVIPIFS, mVIPIFILES, mMAX, mMAXTZ, mPATH, mFS, mHTTP, mURL, mOS, mPS; // npm module references
-try
-{
-	mPATH = require("path");
-	mOS = require("os");
-	mFS = require("fs");
-	mURL = require("url");
-	mMAX = require("maxmind");
-	mMAXTZ = require("maxmind/lib/time_zone");
-	mVIPIFILES = require("./vipi_files");
-	mPS = require("child_process");
-	exports = module.exports = { "lookup" : lookup, "enableupdates" : enableupdates};
-}
-catch (e){ log("\nError loading: "+sPROJECT+"\n"+e.toString()+"\nDid you NPM install? - Or are you loading DB files from correct path?\n"); }
-
-var bThreaded = false;
-var bQuiet = false;
-var sArgs = "";    /** string presentation of arguments */
+var sArgs = ""; /** string presentation of arguments */
 var sUage= "";
 var bHTTP=false;
 var sIP = "127.0.0.1";
 var sPORT = "59999";
 
 var aH = process.argv;
-var a2Check = [];
 
 /** CLI specific arrays */
 var aObjSaveKeys = [];
@@ -90,52 +130,7 @@ var oHTTP;
 var sFileDefaultObj = "";
 var oRHeader = {};
 
-function pad(num, size, signed) { var s = num+""; while (s.length < size) s = "0" + s; return signed ? s : (s > 0 ? "+"+s : "-"+s);}
-var aMonths = [ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" ];
-
-/** var mNET = require("net"); could use net.isIP(), net.isIPv4() & net.isIPv6() instead of regex */
-/* IP:PORT regex for minimal expected addresses */
-var rgxIP = /^([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])\.([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])\.([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])\.([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])$/;
-var rgxIPPORT = /^([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])\.([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])\.([1-9]?\d|1\d\d|2[0-4]\d|25[0-5])\.([1-9]?\d|1\d\d|2[0-4]\d|25[0-5]):([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/;
-//var rgxIPv6 = /^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$|^(([a-zA-Z]|[a-zA-Z][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z]|[A-Za-z][A-Za-z0-9\-]*[A-Za-z0-9])$|^(?:(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){6})(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:::(?:(?:(?:[0-9a-fA-F]{1,4})):){5})(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})))?::(?:(?:(?:[0-9a-fA-F]{1,4})):){4})(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){0,1}(?:(?:[0-9a-fA-F]{1,4})))?::(?:(?:(?:[0-9a-fA-F]{1,4})):){3})(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){0,2}(?:(?:[0-9a-fA-F]{1,4})))?::(?:(?:(?:[0-9a-fA-F]{1,4})):){2})(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){0,3}(?:(?:[0-9a-fA-F]{1,4})))?::(?:(?:[0-9a-fA-F]{1,4})):)(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){0,4}(?:(?:[0-9a-fA-F]{1,4})))?::)(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9]))\.){3}(?:(?:25[0-5]|(?:[1-9]|1[0-9]|2[0-4])?[0-9])))))))|(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){0,5}(?:(?:[0-9a-fA-F]{1,4})))?::)(?:(?:[0-9a-fA-F]{1,4})))|(?:(?:(?:(?:(?:(?:[0-9a-fA-F]{1,4})):){0,6}(?:(?:[0-9a-fA-F]{1,4})))?::))))$/;
-var rgxIPv6 = /^\s*((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:)(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:)))(%.+)?\s*$/;
-var rgxIPv6PORT = /^\s*((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(([0-9A-Fa-f]{1,4}:)(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}))|:)))(%.+)?\s*:([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$/;
-
-var args =
-	[
-		/*0*/[["-h", " --help", "/?"], "\tShows this screen."],
-		/*1*/[["-as", "--asnumber", "/as"], "Includes ASN number of IP queried."],
-		/*2*/[["-b=", "--backups=", "/b="], "DB (default: ./dbs) directory / path to store all MaxMind files."],
-		/*3*/[["-cd", "--cdistance", "/cd"], "Calculate & Include approximate distances in Kilometres between two IPs."],
-		/*4*/[["-d", "--daemon", "/d"], "Daemon HTTP mode on "+sIP+":"+sPORT+" by default."],
-		/*5*/[["-dad", "--dadelete", "/dad"], "(daemon) Allow deletion CLF & JSON files."],
-		/*6*/[["-dp=", "--dipport=", "/dp="], "(daemon) IP:PORT address of the adaptor to bind to."],
-		/*7*/[["-djs", "--djson", "/djs"], "(daemon) 'application/json' Content-Type instead of default 'text/plain'."],
-		/*8*/[["-dno", "--dnoutput", "/dno"], "(daemon) No output or return for any query ignoring all parameters."],
-		/*9*/[["-dnr", "--dnread", "/dnr"], "(daemon) No Read Access ignoring !_rf / !_ra options."],
-		/*10*/[["-dnw", "--dnwrite", "/dnw"], "(daemon) No write or !_skc, !_sko or !_sf functionality."],
-		/*11*/[["-dsa", "--dsaveauto", "/dsa"], "(daemon) Save to automatic date schemed filename (yyyy-mm-dd_mmm) for .clf & .json file."],
-		/*12*/[["-dxa", "--dxasn", "/dxa"], "(daemon) Exclude ASN from queries or saves by default."],
-		/*13*/[["-dxl", "--dxlocate", "/dxl"], "(daemon) Exclude Location info from queries or saves by default."],
-		/*14*/[["-dxt", "--dxtime", "/dxt"], "(daemon) Exclude timezone from queries or saves by default."],
-		/*15*/[["-dxq", "--dxquiry", "/dxq"], "(daemon) Used with -dur to disable !_= functionality for ip lookup string."],
-		/*16*/[["-dxu", "--dxua", "/dxu"], "(daemon) Exclude User-Agents from queries or saves by default."],
-		/*17*/[["-dur", "--duserefer", "/dur"], "(daemon) Use details from referal / dialling cURL."],
-		/*18*/[["-nc", "--noclf", "/nc"], "(daemon & cli) Disables CLF related saves with -sa & -sf parameters."],
-		/*19*/[["-nu", "--noupdates", "/nu"], "No Maxmind DB updates use existing backup files / path."],
-		/*20*/[["-sa", "--saveauto", "/sa"], "Save to file named using date: 'IP [DATE] KEY' (KEY optional) in .clf & .json file."],
-		/*21*/[["-sf=", "--savefile=", "/sf="], "Save like -sa: using specified file prefix name for .clf & .json saves."],
-		/*22*/[["-skc=", "--skclf=", "/skc="], "Save KEY clf string shell-escaped string eg: '200 \"GET / HTTP/1.1\"' to save."],
-		/*23*/[["-sko=", "--skobj=", "/sko="], "Save KEY object json string shell-escaped eg '{\"eg\":1}' to save."],
-		/*24*/[["-tz", "--timezone", "/tz"], "Includes time-zone of IP location queried."],
-		/*25*/[["-udb", "--updatedb", "/udb"], "Update Maxmind DB's."],
-		/*26*/[["-q", "--quiet", "/q"], "\tQuiet mode with no error or default header output."],
-		/*27*/[["-v", "--version", "/v"], "Output version information & exit."],
-		/*28*/[["-xi", "--xinfo", "/xi"], "Show OS / Node.js / Maxmind DB related info & exit."]
-	];
-
 var bJson = false; /* MODE: -djs" || --djson (6) */
-var bNoReturn = false; /* MODE: -dno || --dnooutput (7) */
 var bReadAccess = true; /* MODE: -dnr || --dnoread (8) */
 var bWriteAccess = true; /* MODE: -dnw || --dnowrite (9) */
 var bLogToFile = true; /* MODE: -dsa || --dsaveauto (10) */
@@ -147,19 +142,57 @@ var bNoTimeZone = false; /* MODE: -dxt || --dxtimezone(13) */
 var bNoIPQuiry = false; /* MODE: -dxq" || --dxquiry (14) */
 var bNoUA = false; /* MODE: -dxu" || --dxua (15) */
 var bNoCLF = false; /* MODE: -nc || --noclf (17) */
+var sDBPath;	/* Custome DB PATHS */
 
+var sL = sCNB + "\n@========================================@" + sCN; /* Line for TUI */
+var sMsgWelcome = sCG + "\nSTARTED " + sCN+sCNB + sPROJECT + " " + sVERSION + sCN + " @ " + new Date();
+var sMsgInit = sCP + "System ININT " + sCN+sCNB + "in: " + sCG + "%s" + sCN + " seconds";
+var sEXITs = ["exit", "SIGHUP", "SIGUSR1", "SIGTERM", "SIGPIPE", "SIGINT", "SIGBREAK", "SIGWINCH", "uncaughtException"];
+var args =
+[
+/*0*/[["-h", " --help", "/?"], TAB+"Shows this screen."],
+/*1*/[["-as", "--asnumber", "/as"], "Includes ASN number of IP queried."],
+/*2*/[["-b=", "--backups=", "/b="], "DB (default: ./dbs) directory / path to store all MaxMind files."],
+/*3*/[["-cd", "--cdistance", "/cd"], "Calculate & Include approximate distances in Kilometres between two IPs."],
+/*4*/[["-d", "--daemon", "/d"], "Daemon HTTP mode on "+sIP+":"+sPORT+" by default."],
+/*5*/[["-dad", "--dadelete", "/dad"], "(daemon) Allow deletion CLF & JSON files."],
+/*6*/[["-dp=", "--dipport=", "/dp="], "(daemon) IP:PORT address of the adaptor to bind to."],
+/*7*/[["-djs", "--djson", "/djs"], "(daemon) 'application/json' Content-Type instead of default 'text/plain'."],
+/*8*/[["-dno", "--dnoutput", "/dno"], "(daemon) No output or return for any query ignoring all parameters."],
+/*9*/[["-dnr", "--dnread", "/dnr"], "(daemon) No Read Access ignoring !_rf / !_ra options."],
+/*10*/[["-dnw", "--dnwrite", "/dnw"], "(daemon) No write or !_skc, !_sko or !_sf functionality."],
+/*11*/[["-dsa", "--dsaveauto", "/dsa"], "(daemon) Save to automatic date schemed filename (yyyy-mm-dd_mmm) for .clf & .json file."],
+/*12*/[["-dxa", "--dxasn", "/dxa"], "(daemon) Exclude ASN from queries or saves by default."],
+/*13*/[["-dxl", "--dxlocate", "/dxl"], "(daemon) Exclude Location info from queries or saves by default."],
+/*14*/[["-dxt", "--dxtime", "/dxt"], "(daemon) Exclude timezone from queries or saves by default."],
+/*15*/[["-dxq", "--dxquiry", "/dxq"], "(daemon) Used with -dur to disable !_= functionality for ip lookup string."],
+/*16*/[["-dxu", "--dxua", "/dxu"], "(daemon) Exclude User-Agents from queries or saves by default."],
+/*17*/[["-dur", "--duserefer", "/dur"], "(daemon) Use details from referal / dialling cURL."],
+/*18*/[["-nc", "--noclf", "/nc"], "(daemon & cli) Disables CLF related saves with -sa & -sf parameters."],
+/*19*/[["-nu", "--noupdates", "/nu"], "No Maxmind DB updates use existing backup files / path."],
+/*20*/[["-sa", "--saveauto", "/sa"], "Save to file named using date: 'IP [DATE] KEY' (KEY optional) in .clf & .json file."],
+/*21*/[["-sf=", "--savefile=", "/sf="], "Save like -sa: using specified file prefix name for .clf & .json saves."],
+/*22*/[["-skc=", "--skclf=", "/skc="], "Save KEY clf string shell-escaped string eg: '200 \"GET / HTTP/1.1\"' to save."],
+/*23*/[["-sko=", "--skobj=", "/sko="], "Save KEY object json string shell-escaped eg '{\"eg\":1}' to save."],
+/*24*/[["-tz", "--timezone", "/tz"], "Includes time-zone of IP location queried."],
+/*25*/[["-udb", "--updatedb", "/udb"], "Update Maxmind DB's."],
+/*26*/[["-q", "--quiet", "/q"], TAB+"Quiet mode with no error or default header output."],
+/*27*/[["-v", "--version", "/v"], "Output version information & exit."],
+/*28*/[["-xi", "--xinfo", "/xi"], "Show OS / Node.js / Maxmind DB related info & exit."]
+];
+/** Header String appropraitely set for CLI & HTTP Plain mode. Can be extended for HTML as well.*/
 function stringHeader()
 {
 	var sR = "";
 	sR+= sCDG+"|\\¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯/|"+EOL+sCN;
 	sR+= sCDG+"| ==== "+sCNB+sCY+"Visitor"+sCNB+sCC+" IP"+sCG+" Info"+sCN+sCDG+" ==== |"+EOL;
 	sR+= sCDG+"|/_________________________\\|"+EOL+sCN;
-	sR+= sCN+"\t"+sCNB+sCW+sPROJECT+sCN+" - "+sCDG+sVERSION+"\n"+sCN;
+	sR+= sCN+TAB+sCNB+sCW+sPROJECT+sCN+" - "+sCDG+sVERSION+EOL+sCN;
 	return sR;
 }
+/** HTTP deamon mode header string adjuster for quiry-string parameter addition and removal of non-related args.*/
 function appHeaderString()
-{
-	setColors();
+{	// adjust colours to current mode.? offset to init // setColours();
 	sArgs ="";
 	sUage = EOL + stringHeader();
 	if (bHTTP)
@@ -174,15 +207,15 @@ function appHeaderString()
 		args.unshift([["-ra", "--readauto", "/ra"], "Return content-type: 'application/json'"]);
 		args.unshift([["-nc", "--noclf", "/nc"], "Include requesting users agent in save."]);
 		args.unshift([["-nr", "--noreturn", "/nr"], "No output or return."]);
-		args.unshift([["-nu", "--noua", "/nu"], "\tInclude requesting users agent in save."]);
+		args.unshift([["-nu", "--noua", "/nu"], TAB+"Include requesting users agent in save."]);
 		args.unshift([["-ls", "--listsaves", "/ls"], "Lists all available user obj json files."]);
-		args.unshift([["-js", "--json", "/j"], "\tReturn content-type: 'application/json' instead of 'text/plain'."]);
-		args.unshift([["-h", "--help", "/h"], "\tShows this help page."]);
+		args.unshift([["-js", "--json", "/j"], TAB+"Return content-type: 'application/json' instead of 'text/plain'."]);
+		args.unshift([["-h", "--help", "/h"], TAB+"Shows this help page."]);
 		args.unshift([["-da", "--deleteall", "/da"], "Deletes all clf & obj file(s) resetting to new."]);
 		args.unshift([["-df=", "--deletefile=", "/df="], "Delete obj & clf named file(s)."]);
 		args.unshift([["-cd", "--cdistance", "/cd"], "Calculate & Include approximate distances in Kilometres between IPs pairs."]);
 		args.unshift([["-as", "--asnumber", "/as"], "Includes ASN number of IP queried."]);
-//    a1.push([["-", "--E", "/" ], "Example"]);
+//		a1.push([["-", "--E", "/" ], "Example"]);
 	}
 
 	for (var iX=0; iX < args.length; ++iX)
@@ -198,26 +231,26 @@ function appHeaderString()
 
 	if (bHTTP)
 	{
-		sUage+= "\nUsage (?!_=...):"+EOL;
-		sUage+= "\thttp://"+sCNB+sIP+":"+sPORT+sCN+"/?!_=ua\t\t# use the inquiring address instead of ip."+EOL;
-		sUage+= "\thttp://"+sCNB+sIP+":"+sPORT+sCN+"/?!_=208.67.222.222\t\t# quiry & get results in text/plain"+EOL;
-		sUage+= "\thttp://"+sCNB+sIP+":"+sPORT+sCN+"/?!_=208.67.222.222,8.8.8.8,8.8.4.4\t# multiple ip loolup."+EOL;
-		sUage+= "\thttp://"+sCNB+sIP+":"+sPORT+sCN+"/?!_=8.8.8.8&!_sa&!_sko=%7B%7D\t# Auto save queried IP + key to file."+EOL;
-		sUage+= "\n(&) Quiry String / Get-Parameters:"+EOL+sArgs+EOL;
+		sUage+= EOL+"Usage (?!_=...):"+EOL;
+		sUage+= TAB+"http://"+sCNB+sIP+":"+sPORT+sCN+"/?!_=ua"+TAB+TAB+"# use the inquiring address instead of ip."+EOL;
+		sUage+= TAB+"http://"+sCNB+sIP+":"+sPORT+sCN+"/?!_=208.67.222.222"+TAB+TAB+"# quiry & get results in text/plain"+EOL;
+		sUage+= TAB+"http://"+sCNB+sIP+":"+sPORT+sCN+"/?!_=208.67.222.222,8.8.8.8,8.8.4.4"+TAB+"# multiple ip loolup."+EOL;
+		sUage+= TAB+"http://"+sCNB+sIP+":"+sPORT+sCN+"/?!_=8.8.8.8&!_sa&!_sko=%7B%7D"+TAB+"# Auto save queried IP + key to file."+EOL;
+		sUage+= EOL+"(&) Quiry String / Get-Parameters:"+EOL+sArgs+EOL;
 	}
 	else
 	{
-		sUage+= "\nUsage:"+EOL;
-		sUage+= "\t"+sCNB+sPROJECT+sCN+" [options] 208.67.222.222 "+EOL;
-		sUage+= "\nOptions:"+EOL+sArgs;
+		sUage+= EOL+"Usage:"+EOL;
+		sUage+= TAB+sCNB+sPROJECT+sCN+" [options] 208.67.222.222 "+EOL;
+		sUage+= EOL+"Options:"+EOL+sArgs;
 	}
 
 	if (bHTTP)
 	{
-		sUage = sUage.replace(/, /g, ",\t ");
+		sUage = sUage.replace(/, /g, ","+TAB+" ");
 		sUage = sUage.replace(/¯/g, "-");
 	}
-	else{ sUage+= "\nSee: \t"+sCW+sCNB+"man "+sPROJECT+sCN+"\t# for full details"+EOL; }
+	else{ sUage+= EOL+"See: "+TAB+sCW+sCNB+"man "+sPROJECT+sCN+TAB+"# for full details"+EOL; }
 }
 
 function showHelp(msgExtra, iExitCode, res)
@@ -225,21 +258,6 @@ function showHelp(msgExtra, iExitCode, res)
 	if (UID === sUage || "" === sUage) { appHeaderString(); }
 	log(sUage+ ((UID !== msgExtra)?msgExtra:""), iExitCode, res);
 }
-
-/** Regular Expression IndexOf for Arrays or String
- * Iterates array & returns the index(s) of matches as an array or single integer position; otherwise -1 if not found.
- * @param reg RegEx reg regular expression to test with. E.g. /-ba/gim
- * @return Array|Number position of all occurrence(s) or -1 means not found anywhere. */
-Object.defineProperty(Array.prototype, 'indexOfAll',
-	{
-		value: function indexOfAll(reg)
-		{
-			var a2Return = [];
-			for (var i in this) { if (this.hasOwnProperty(i)) {if(this[i].toString().match(reg)){ a2Return.push(i);} } }
-			var iL = a2Return.length;
-			return (0 === iL) ? Number(-1) : (1 === iL) ? Number(a2Return[0]) : a2Return;
-		}
-	});
 
 /** closure callback that reads tail of file to extrapolate version info */
 function cbcFileDBRead(sFile)
@@ -275,9 +293,9 @@ function cbcFileStat(sFile)
 }
 /** asynchronously read all DB files */
 function UpdateDBVersions()
-{  /* async invoke all reads needed to get files */
+{	/* async invoke all reads needed to get files */
 	for (var iX=0; iX < aDBs.length; ++iX)
-	{  //noinspection JSUnresolvedFunction
+	{	//noinspection JSUnresolvedFunction
 		mFS.stat(aDBs[iX], cbcFileStat(aDBs[iX]));
 	}
 }
@@ -319,7 +337,7 @@ function XInfo()
 
 /** Quit / Ending Message to display for time taken, etc. @param Number integer exit code. */
 function clDestruct(iCode)
-{  /* on definable exit codes show msg */
+{	/* on definable exit codes show msg */
 	return function(i)
 	{
 		var sQUIT = "";
@@ -327,15 +345,16 @@ function clDestruct(iCode)
 		if (0 !== iCode && 0 !== i)
 		{
 			bTTY = isTerminal();
-			setColors();
-			sQUIT= 0 !== iCode ? "\nEXITING with: "+sCC+sEXITs[iCode]+sCN+" code: "+sCC+iCode : ""+sCN;
-			sQUIT+="\nTSR "+sCNB+"Time"+sCN+" in Seconds: " +sCNB+(Date.now()/1000-f_SysT1).toString()+sCN;
+			setColours();
+			sQUIT= 0 !== iCode ? EOL+"EXITING with: "+sCC+sEXITs[iCode]+sCN+" code: "+sCC+iCode : ""+sCN;
+			sQUIT+=EOL+"TSR "+sCNB+"Time"+sCN+" in Seconds: " +sCNB+(Date.now()/1000-f_SysT1).toString()+sCN;
 		}
 		if (!bQuiet && bHTTP) { log(sQUIT); }
 		process.exit(0);
 	}
 }
 
+/** approximate seperation between to IP's based on locations */
 function calculateDistances(aRet)
 {
 	for (var iX=0; iX < aRet.length; ++iX)
@@ -353,24 +372,23 @@ function calculateDistances(aRet)
 }
 
 /**---------------------------------------
- *  MAIN: Initialiser Function.
+ * MAIN: Initialiser Function.
  * loads former files collected on last run
  * or before stop. @param Object request.
  *---------------------------------------*/
 function initLoad()
-{  // measuring init times here
-	if (process.argv[1] !== __filename) { bThreaded = true; }
-
+{
+	var a2Check = [];
 	var iX; // GENERAL COUNTER
 	var sPathSaveFile;
 	var bNewDBPath = false;
-	var sDBPath;
+
 	for (iX = 0; iX < sEXITs.length; ++iX) { process.on(sEXITs[iX], clDestruct(iX) ); }
-// for (iX = 0; iX < sEXITs.length; ++iX) { process.on(sEXITs[iX], function (i) { destruct(i); }); }
 
 	/* where -v || --version || /? is present */
 	if (-1 !== aH.indexOf("-v") || -1 !== aH.indexOf("--version") || -1 !==aH.indexOf("/v")) { log(sVERSION, 0); }
-	if (!bThreaded && 2 === aH.length){ showHelp(); }
+
+	if (2 === aH.length && !module.parent){ showHelp("", 0); }
 	/* where '-h' or '--help' or '/?' is present */
 	if (-1 !== aH.indexOf("-h") || -1 !== aH.indexOf("--help") || -1 !==aH.indexOf("/?")) { showHelp("", 0); }
 
@@ -396,47 +414,12 @@ function initLoad()
 				{
 					sDBPath = aH[iX].split("=")[1];
 					if (UID === sDBPath)
-					{ log(sCR+"\n"+sArgument+sCN+" <- is empty! MUST refernce valid path eg: -b=/home/user/geoip/\n", 11); }
+					{ log(sCR+EOL+sArgument+sCN+" <- is empty! MUST refernce valid path eg: -b=/home/user/vipi_db/"+EOL, 11); }
 					else
 					{
 						if ("/" !== sDBPath[sDBPath.length-1])
-						{  //noinspection JSUnresolvedVariable
+						{	//noinspection JSUnresolvedVariable
 							sDBPath+="/";
-						}
-						try
-						{  //noinspection JSUnresolvedFunction
-							mFS.accessSync(sDBPath);
-							//noinspection JSUnresolvedFunction
-							var files = mFS.readdirSync(sDBPath);
-							var Found = files.indexOfAll(".dat.gz");
-							if ("object" === typeof(Found) && UID !== Found.length)
-							{
-								if (6 !== Found.length) { bNewDBPath = true; }
-								else
-								{
-									if
-									(
-										!(
-											-1<files.indexOf(aDBs[0]) || -1<files.indexOf(aDBs[1])||-1<files.indexOf(aDBs[2]) ||
-											-1<files.indexOf(aDBs[3])|| -1<files.indexOf(aDBs[4]) || -1<files.indexOf(aDBs[5])
-										)
-									)
-									{ bNewDBPath = true; }
-								}
-							}
-							else { bNewDBPath = true; }
-						}
-						catch(e)
-						{
-							try
-							{ //noinspection JSUnresolvedFunction
-								mFS.mkdirSync(sDBPath);
-								bNewDBPath = true;
-							}
-							catch(e2)
-							{
-								log(sCR+"\n"+sDBPath+sCN+" <- Maxmind DB Path is not valid or accessible!\n"+sCDG+e.toString()+sCN, 12);
-							}
 						}
 						sDB = sDBPath; // set path for DB to whats prefered.
 					}
@@ -446,14 +429,14 @@ function initLoad()
 				{
 					sPathSaveFile = aH[iX].split("=")[1];
 					if (UID === sPathSaveFile)
-					{ log(sCR+"\n"+sArgument+sCN+" <- is empty! MUST refernce valid file eg: -sf=visitor_id1.json\n", 13); }
+					{ log(sCR+EOL+sArgument+sCN+" <- is empty! MUST refernce valid file eg: -sf=visitor_id1.json"+EOL, 13); }
 					++iArgsIn; break;
 				}
 				else if (sArgument === "-skc=" || sArgument === "--skclf=" || sArgument === "/skc=")
 				{
 					var sKeyClf = aH[iX].split("=")[1];
 					if (UID === sKeyClf)
-					{ log(sCR+"\n"+sArgument+sCN+" <- is empty! MUST contain valid string.\n", 13); }
+					{ log(sCR+EOL+sArgument+sCN+" <- is empty! MUST contain valid string."+EOL, 13); }
 					aClfSaveKeys.push(sKeyClf);
 					++iArgsIn; break;
 				}
@@ -461,85 +444,157 @@ function initLoad()
 				{
 					var sKeyObj = aH[iX].split("=")[1];
 					if (UID === sKeyObj || "" === sKeyObj)
-					{ log("\n"+sArgument+sCN+" <- is empty! MUST contain valid object json string.\n", 14); }
+					{ log(EOL+sArgument+sCN+" <- is empty! MUST contain valid object json string."+EOL, 14); }
 
 					try
 					{
 						var oKeyObj = JSON.parse(sKeyObj);
 						if ( "object" !== typeof(oKeyObj) || null === oKeyObj )
-						{ log(sCR+"\nERROR: "+sCN+sArgument+"'"+sCNB+sKeyObj+sCN+"' is NOT a valid JSON object.\n", 15); }
+						{ log(sCR+EOL+"ERROR: "+sCN+sArgument+"'"+sCNB+sKeyObj+sCN+"' is NOT a valid JSON object."+EOL, 15); }
 						aObjSaveKeys.push(oKeyObj);
 						++iArgsIn; break;
 					}
-					catch(e) { log(sCR+"\nERROR: "+sCN+sArgument+"'"+sCNB+sKeyObj+sCN+"' is NOT a valid JSON object.\n", 16); }
+					catch(e) { log(sCR+EOL+"ERROR: "+sCN+sArgument+"'"+sCNB+sKeyObj+sCN+"' is NOT a valid JSON object."+EOL, 16); }
 				}
 				else if (sArgument === "-dp=" || sArgument === "--dipport=" || sArgument === "/dp=")
 				{
 					var sExts = aH[iX].split("=")[1];
 					if (UID === sExts)
-					{ log(sCR+"\n"+sArgument+sCN+" <- is empty! MUST reference a valid IP:PORT of an adaptor to bind to.\n", 17); }
+					{ log(sCR+EOL+sArgument+sCN+" <- is empty! MUST reference a valid IP:PORT of an adaptor to bind to."+EOL, 17); }
 					else
-					{  // check whether valid IPv4 or IPv6 address is passed
+					{	// check whether valid IPv4 or IPv6 address is passed
 						var bIPv4 = rgxIPPORT.test(sExts);
 						var bIPv6 = rgxIPv6PORT.test(sExts);
 						if (!bIPv4 && !bIPv6)
 						{
-							log(sCR+"\nInvalid Address: "+ sCN + sCNB + sExts + sCN + " <- Require VALID IPv4 or IPv6.\n"+sCN, 18);
+							log(sCR+EOL+"Invalid Address: "+ sCN + sCNB + sExts + sCN + " <- Require VALID IPv4 or IPv6."+EOL+sCN, 18);
 						}
 						sPORT = sExts.split(":")[sExts.split(":").length-1];
 
 						if (!bIPv6) { sIP = sExts.split(":").splice(0, sExts.split(":").length-1).join(""); }
 						else { sIP = sExts.substring(0, sExts.indexOf(":"+sPORT)); }
+						args[6].push(true);
+
 					}
 					++iArgsIn; break;
 				}
-				else { showHelp("\n"+sCR+sArgument+sCN + sCNB + "<- equative argument not supported!\n"+sCN, 19); }
+				else { log(EOL+sCR+sArgument+sCN + sCNB + "<- equative argument not supported!\n"+sCN, 19); }
 			}
 
 			if (-1 !== args[iY][0].indexOf(sArgument)) { args[iY].push(true); ++iArgsIn; break; }
 		}
 
 		if (iBeforeCheck === iArgsIn)
-		{  //process.argv.splice(2, 7, 0)
-			var msg = "\n\nInvalid parameter: '"+sCR+sCNB+ process.argv.splice(2, 7, 0)+sCN+"'"+EOL;
-			log(msg, 1);
+		{	//process.argv.splice(2, 7, 0)
+			log(EOL+"Invalid parameter: '"+sCR+sCNB+ process.argv.splice(2, 7, 0)+sCN+"'"+EOL, 1);
 		}
+	}
+
+	/* MODE: -nu && --dbu CLASHING Update & no update flags*/
+	if (UID !== args[25][2] && UID !== args[19][2])
+	{
+		var msg = sCR+EOL+"Invalid / Clashing options: "+sCN+sCNB+args[25][0]+ " , " +args[19][0] + sCN + "; can NOT be in NO-Update & Update modes at once."+EOL+sCN;
+		log(msg, 20);
 	}
 
 	/* MODE: -q || --quiet (18) */
 	if (UID !== args[26][2]) { bQuiet = true; }
 
+	try
+	{	//noinspection JSUnresolvedFunction
+		mFS.accessSync(sDB);
+		//noinspection JSUnresolvedFunction
+		var files = mFS.readdirSync(sDB);
+		var Found = files.indexOfAll(".dat.gz");
+		if ("object" === typeof(Found) && UID !== Found.length)
+		{
+			if (6 !== Found.length) { bNewDBPath = true; }
+			else
+			{
+				if
+				(
+					!(
+						-1<files.indexOf(aDBs[0]) || -1<files.indexOf(aDBs[1])||-1<files.indexOf(aDBs[2]) ||
+						-1<files.indexOf(aDBs[3])|| -1<files.indexOf(aDBs[4]) || -1<files.indexOf(aDBs[5])
+					)
+				)
+				{ bNewDBPath = true; }
+			}
+		}
+		else { bNewDBPath = true; }
+	}
+	catch(e)
+	{	// in CLI mode with single lookups
+		if (!(a2Check.length !== 0 && UID === args[4][2] && UID === args[6][2] && UID === sDBPath))
+		{
+			if (!(3 === aH.length && UID !== args[25][2]) || (UID !== args[4][2] || UID !== args[6][2]))
+			{
+				try
+				{ //noinspection JSUnresolvedFunction
+					mFS.mkdirSync(sDB);
+					bNewDBPath = true;
+				}
+				catch(e2)
+				{
+					log(sCR+EOL+sDB+sCN+" <- Maxmind DB Path is not valid or accessible!"+EOL+sCDG+e.toString()+sCN, 12);
+				}
+			}
+		}
+	}
+
+	// when not in deamon modes and not using custom paths use default dbs shipped with module.
+	if (a2Check.length !== 0 && UID === args[4][2] && UID === args[6][2] && UID === sDBPath || (3 === aH.length && UID !== args[25][2]))
+	{
+		sDB= __dirname+"/vipi_dbs/";
+	}
+
 	for (iX=0; iX < aDBs.length; ++iX) { aDBs[iX] = sDB+aDBs[iX]; }
 
 	try
-	{  // Custom path & noupdate disabled by default.
-		if (UID !== sDBPath && UID === args[19][2] && bNewDBPath)
+	{	/* MODE: -d || --daemon || -dp || --dipport modes (3,4) */
+		if (UID !== args[4][2] || UID !== args[6][2]) { log(stringHeader()+sMsgWelcome); }
+
+		// Custom path & noupdate disabled by default.
+		if (UID !== args[25][2] || (UID === args[19][2] && bNewDBPath && UID !== sDBPath) || (UID !== args[4][2] || UID !== args[6][2]))
 		{
-			var sExec = "node "+ __dirname+"/vipi_files.js -i "+sDBPath;
+			var sExec = "node "+ __dirname+"/vipi_files.js -i "+sDB;
 			if (bQuiet) { sExec+=" -q"; }
 			var psOptions = { stdio: [0, 1, process.stdout], cwd : process.cwd(), env: {"LC_ALL":"C"} };
 			try
-			{  //noinspection JSUnresolvedFunction
+			{	//noinspection JSUnresolvedFunction
 				mPS.execSync(sExec, psOptions);
-				log("Successfully installed files to path "+sDB);
+				if (UID !== args[4][2] || UID !== args[6][2] || UID !== sDBPath || (3 === aH.length && UID !== args[25][2]))
+				{
+					log("Successfully installed / updated files at path: "+sDB);
+				}
 			}
 			catch(e)
 			{
 				bQuiet = false;
-				log("\n"+sCR+"ERROR: "+sCN+"Could not initiate DB files at: "+sDBPath+"\n"+sCDG+e.toString()+sCN, 13);
+				log(EOL+sCR+"ERROR: "+sCN+"Could not initiate DB files at: "+sDBPath+EOL+sCDG+e.toString()+sCN, 13);
 			}
 		}
-		//noinspection JSUnresolvedFunction
-		mMAX.init(aDBs, {"indexCache": true, "checkForUpdates": true});
-		if (UID !== sDBPath) { log("\nUsing custom DB path: "+sDB+"\n"); }
+
+		/* MODE: Update / Custome install only */
+		if (UID === args[19][2] && (3 === aH.length || (4 === aH.length && UID !== sDBPath)))
+		{
+			if (UID !== args[4][2] && UID !== args[6][2] ) { log("\nInstalled / Updated Files to: "+sDB+EOL); }
+		}
+
+		if (0 !== a2Check.length || (UID !== args[4][2] || UID !== args[6][2]) || module.parent)
+		{
+			//noinspection JSUnresolvedFunction
+			mMAX.init(aDBs, {"indexCache": true, "checkForUpdates": true});
+			if (UID !== sDBPath) { log(EOL+"Using custom DB path: "+sDB+EOL); }
+		}
 	}
 	catch(err)
 	{
 		bQuiet = false;
-		log("\n"+sCR+"ERROR: "+sCN+"loading Maxmind DB files!\n"+sCDG+err.toString()+"\n"+sCN, 20);
+		log(EOL+sCR+"ERROR: "+sCN+"loading Maxmind DB iles!"+EOL+sCDG+err.toString()+EOL+sCN, 20);
 	}
 
-	if ( 3 === aH.length && UID !== args[2][2] ){ log("\nSuccesfully tested Maxmind DB loading from custom path: "+sCNB+sDBPath+sCN+EOL, 0); }
+	if ( 3 === aH.length && UID !== args[2][2] ){ log(EOL+"Succesfully tested Maxmind DB loading from custom path: "+sCNB+sDBPath+sCN+EOL, 0); }
 
 	/* MODE: -tz || --timezone (27) */ // if (UID !== args[27][2]) { bNoTimeZone = false; }
 	/* MODE: -asn || --asnumber (2) */ // if (UID !== args[1][2]) { bNoASN = false; }
@@ -556,22 +611,27 @@ function initLoad()
 			oRet.ip = a2Check[iX].ip;
 			oRet.date = new Date();
 
-			if (a2Check[iX].v6) { oRet.location = mMAX.getLocationV6(a2Check[iX].ip); }
-			else { oRet.location = mMAX.getLocation(a2Check[iX].ip); }
+			if (a2Check[iX].v6)
+			{	//noinspection JSUnresolvedFunction
+				oRet.location = mMAX.getLocationV6(a2Check[iX].ip);
+			}
+			else
+			{	//noinspection JSUnresolvedFunction
+				oRet.location = mMAX.getLocation(a2Check[iX].ip);
+			}
 
 			if (null === oRet.location || UID === oRet.location)
-			{  /* Dont write ... return. */
+			{	/* Dont write ... return. */
 				log(sCR+"ERROR: "+sCN+a2Check[iX].ip+sCNB+" invalid address."+EOL+sCN, UID, 1);
 			}
 
 			if (!bNoASN)
-			{  //noinspection JSUnresolvedVariable
-				if (a2Check[iX].v6) { oRet.asn = mMAX.getOrganizationV6(oRet.ip); }
-				else { oRet.asn = mMAX.getOrganization(oRet.ip); }
+			{	//noinspection JSUnresolvedFunction
+				oRet.asn = (a2Check[iX].v6) ? mMAX.getOrganizationV6(oRet.ip) : mMAX.getOrganization(oRet.ip);
 			}
 
 			if (!bNoTimeZone)
-			{  //noinspection JSUnresolvedVariable
+			{	//noinspection JSUnresolvedVariable
 				oRet.timeZone = mMAXTZ(oRet.location.countryCode, oRet.location.region);
 				if (UID === oRet.timeZone) { oRet.timeZone="unrecognised-timezone"; }
 			}
@@ -584,7 +644,7 @@ function initLoad()
 		/* MODE: -cd || --cdistance (2) */
 		if (UID !== args[3][2]) { calculateDistances(aRet); }
 
-		/* MODE: -sa || --saveauto (19)  | -sf || --savefile (20) */
+		/* MODE: -sa || --saveauto (19) | -sf || --savefile (20) */
 		if (UID !== args[20][2] || (UID !== args[21][2]))
 		{
 			var aCLF = [];
@@ -597,10 +657,11 @@ function initLoad()
 					var dX = aRet[iX].date;
 					var sDate = dX.getDate() + "/" + aMonths[dX.getMonth()]+ "/" + dX.getFullYear();
 					sDate+= ":" + dX.getHours() + ":" + pad(dX.getMinutes(), 2, true) + ":" + pad(dX.getSeconds(), 2, true);
-					sDate+= " " + pad(dX.getTimezoneOffset()/60*-100, 4);
+					sDate+= " " + pad(dX.getTimezoneOffset()/60*-100, 4, false);
 					if (UID !== a2Check[iX].keyclf) { aRet[iX].keyclf = a2Check[iX].keyclf; }
 
 					var sCLF = aRet[iX].keyclf ? " " + aRet[iX].keyclf : "";
+					//noinspection JSUnresolvedVariable
 					var sLocation = UID !== aRet[iX].location ?
 					" \"" + aRet[iX].location.countryCode + "/" + aRet[iX].location.city+"/" +
 					aRet[iX].location.latitude + "/" +aRet[iX].location.longitude+"\""
@@ -671,14 +732,13 @@ function initLoad()
 			if (!bQuiet)
 			{
 				var fSecs=Date.now()/1000-f_SysT1;
-				log(stringHeader()+sMsgWelcome);
 				console.log(sMsgInit, fSecs, sL);
 				//noinspection JSUnusedAssignment
 				bTTY = isTerminal();
-				setColors();
+				setColours();
 				log("Server running at "+sCW+sCNB+"http://"+sIP+sCN+":"+sCNB+sCW+sPORT+"/"+sCN);
 				bTTY=false;
-				setColors();
+				setColours();
 			}
 		}
 		catch (e) { log(e.toString()); }
@@ -686,7 +746,7 @@ function initLoad()
 }
 
 function HttpHandle(req, res)
-{  /* 200 back if requested method is not GET /... */
+{	/* 200 back if requested method is not GET /... */
 	res.hasheaderset = false;
 	//noinspection JSUnresolvedVariable
 	var _GET = mURL.parse(req.url,true).query;
@@ -717,7 +777,7 @@ function HttpHandle(req, res)
 	var a2s;
 	IPs = bNoIPQuiry ? UID : _GET["!_"];
 	aIPs = [];
-	a2Check = [];
+	var a2Check = [];
 	/** CLI specific arrays */
 	aObjSaveKeys = [];
 
@@ -738,7 +798,7 @@ function HttpHandle(req, res)
 	}
 
 	if ("GET" !== req.method)
-	{  /* reduce header chunk indicator not needed. */
+	{	/* reduce header chunk indicator not needed. */
 		res.hasheaderset = true;
 		//noinspection JSUnresolvedFunction
 		res.removeHeader("transfer-encoding");
@@ -822,7 +882,7 @@ function HttpHandle(req, res)
 		if ((UID === IPs || "" === IPs) && true !== bOUTPUT)
 		{
 			if (UID === xff && UID === xc)
-			{  //noinspection JSUnresolvedVariable
+			{	//noinspection JSUnresolvedVariable
 				IPs = req.connection.remoteAddress;
 			}
 			else { IPs = UID === xc ? xff : xc; }
@@ -837,7 +897,7 @@ function HttpHandle(req, res)
 		if ("ua" === IPs)
 		{
 			if (UID === xff && UID === xc)
-			{  //noinspection JSUnresolvedVariable
+			{	//noinspection JSUnresolvedVariable
 				IPs = req.connection.remoteAddress;
 			}
 			else { IPs = UID === xc ? xff : xc; }
@@ -856,9 +916,9 @@ function HttpHandle(req, res)
 			}
 		}
 		else
-		{  //noinspection JSCheckFunctionSignatures
+		{	//noinspection JSCheckFunctionSignatures
 			if (rgxIP.test(IPs) || rgxIPv6.test(IPs))
-			{  //noinspection JSCheckFunctionSignatures
+			{	//noinspection JSCheckFunctionSignatures
 				a2Check.push({"ip": IPs, "v6": rgxIPv6.test(IPs)});
 			}
 			else { log(sCR+"ERROR: "+sCN+sCNB+IPs+sCN+" invalid IPv4/IPv6 address."+EOL, UID, res); }
@@ -964,10 +1024,17 @@ function HttpHandle(req, res)
 		oRet.ip = a2Check[iX].ip;
 		oRet.date = new Date();
 
-		if (a2Check[iX].v6) { oRet.location = mMAX.getLocationV6(a2Check[iX].ip); }
-		else { oRet.location = mMAX.getLocation(a2Check[iX].ip) }
+		if (a2Check[iX].v6)
+		{	//noinspection JSUnresolvedFunction
+			oRet.location = mMAX.getLocationV6(a2Check[iX].ip);
+		}
+		else
+		{	//noinspection JSUnresolvedFunction
+			oRet.location = mMAX.getLocation(a2Check[iX].ip);
+		}
+
 		if (null === oRet.location)
-		{  /* Dont write ... return. */
+		{	/* Dont write ... return. */
 			log(sCR+"ERROR: "+sCN+sCNB+a2Check[iX].ip+sCN+" invalid address."+EOL, UID, res);
 			break;
 		}
@@ -989,15 +1056,14 @@ function HttpHandle(req, res)
 		}
 
 		if (!bNoTimeZone || (bWriteAccess && (UID !== _GET["!_tz"] || UID !== _GET["!_timezone"])))
-		{
+		{	//noinspection JSUnresolvedVariable
 			oRet.timeZone = mMAXTZ(oRet.location.countryCode, oRet.location.region);
 			if (UID === oRet.timeZone) { oRet.timeZone="unrecognised-timezone"; }
 		}
 
 		if (!bNoASN || (bWriteAccess && (UID !== _GET["!_as"] || UID !== _GET["!_asnumber"])))
-		{
-			if (a2Check[iX].v6) { oRet.asn = mMAX.getOrganizationV6(oRet.ip); }
-			else { oRet.asn = mMAX.getOrganization(oRet.ip); }
+		{	//noinspection JSUnresolvedFunction
+			oRet.asn = (a2Check[iX].v6) ? mMAX.getOrganizationV6(oRet.ip) : mMAX.getOrganization(oRet.ip);
 		}
 
 		if (a2Check[iX].keyobject)
@@ -1029,14 +1095,14 @@ function HttpHandle(req, res)
 		aCLF = [aRet.length+1];
 		for (iX=0; iX < aRet.length; ++iX)
 		{
-			var dX = aRet[iX].date;
-//console.log("%s/%s/%s:%s:%s:%s %s", dX.getDate(), aMonths[dX.getMonth()], dX.getFullYear(), dX.getHours(), dX.getMinutes(), dX.getSeconds(), pad(dX.getTimezoneOffset()/60*-100, 4) );
+			var dX = aRet[iX].date; //console.log("%s/%s/%s:%s:%s:%s %s", dX.getDate(), aMonths[dX.getMonth()], dX.getFullYear(), dX.getHours(), dX.getMinutes(), dX.getSeconds(), pad(dX.getTimezoneOffset()/60*-100, 4) );
 			var sDate = dX.getDate() + "/" + aMonths[dX.getMonth()]+ "/" + dX.getFullYear();
 			sDate+= ":" + dX.getHours() + ":" + pad(dX.getMinutes(), 2, true) + ":" + pad(dX.getSeconds(), 2, true);
-			sDate+= " " + pad(dX.getTimezoneOffset()/60*-100, 4);
+			sDate+= " " + pad(dX.getTimezoneOffset()/60*-100, 4, false);
 			if (UID !== a2Check[iX].keyclf) { aRet[iX].keyclf = a2Check[iX].keyclf; }
 
 			var sCLF = aRet[iX].keyclf ? " " + aRet[iX].keyclf : "";
+			//noinspection JSUnresolvedVariable
 			var sLocation = UID !== aRet[iX].location ?
 			" \"" + aRet[iX].location.countryCode + "/" + aRet[iX].location.city+"/" +
 			aRet[iX].location.latitude + "/" +aRet[iX].location.longitude+"\""
@@ -1068,7 +1134,7 @@ function HttpHandle(req, res)
 		}
 	}
 	else
-	{  // CUSTOME LOGS FOR USER DEFINED SESSIONS
+	{	// CUSTOME LOGS FOR USER DEFINED SESSIONS
 		if (0 < aRet.length && bWriteAccess && bObjFileWrite)
 		{
 			if (UID === _GET["!_nc"] && UID === _GET["!_noclf"] && !bNoCLF)
@@ -1084,7 +1150,7 @@ function HttpHandle(req, res)
 
 			/** remove keyclf as its redundant in object */
 			for (iY=0; iY < aRet.length; ++iY) { delete(aRet[iY].keyclf); }
-			writeOBJFile(aRet); // if (UID !== _GET["!_sko"] || UID !== _GET["!_skobj"]) {  }
+			writeOBJFile(aRet); // if (UID !== _GET["!_sko"] || UID !== _GET["!_skobj"]) { }
 		}
 		if (UID !== aRet[0] && UID !== aRet[0].keyclf) { for (iY=0; iY < aRet.length; ++iY) { delete(aRet[iY].keyclf); } }
 
@@ -1127,12 +1193,12 @@ function deleteOBJFile(res, file)
 {
 	var iX=0; //GEMERAL COUNTER
 	try
-	{  //noinspection JSUnresolvedFunction
-		mFS.readdir(__dirname, function (err, files)
+	{	//noinspection JSUnresolvedFunction
+		mFS.readdir(process.cwd(), function (err, files)
 		{
 			if (null !== err) { log ("ERROR: "+err.toString(), UID, res); }
 			else
-			{  /* console.log("Files list in current path ", files); */
+			{	/* log("Files list in current path "); log(files); */
 				var FoundOBJ = files.indexOfAll(UID === file ? sVOBJ : file+sUOBJ);
 				var FoundCLF = files.indexOfAll(UID === file ? sVCLF : file+sUCLF);
 				var FoundOBJUser = -1;
@@ -1174,16 +1240,16 @@ function deleteOBJFile(res, file)
 					for (iX=0; iX < aDelete.length; ++iX)
 					{
 						try
-						{  //noinspection JSUnresolvedFunction
+						{	//noinspection JSUnresolvedFunction
 							mFS.unlink(aDelete[iX], clDelete(aDelete.toString(), aDelete.length-1 === iX ? res : UID));
 						}
-						catch(err) { console.log("ERROR: ", err); }
+						catch(err) { log("ERROR: "+err.toString()); }
 					}
 				}
 			}
 		});
 	}
-	catch (e2) { console.log(e2); log ("ERROR: could not get path - "+e2.toString(), UID, res); }
+	catch (e2) { log(e2.toString()); log ("ERROR: could not get path - "+e2.toString(), UID, res); }
 }
 
 /** closure function for deleting a set.*/
@@ -1197,7 +1263,7 @@ function clDelete(sFiles, res)
 function returnFilesList(res)
 {
 	try
-	{  //noinspection JSUnresolvedFunction
+	{	//noinspection JSUnresolvedFunction
 		mFS.readdir(".", function (e, files)
 		{
 			if (null !== e) { log (e.toString(), UID, res); }
@@ -1224,15 +1290,15 @@ function returnFilesList(res)
 function returnOBJFile(res, sFile)
 {
 	try
-	{  //noinspection JSUnresolvedFunction
+	{	//noinspection JSUnresolvedFunction
 		mFS.readFile(sFile, { "encoding" : "utf8" }, function(e2, d2)
 		{
-			if (null !== e2) { log("ERROR: "+sFile+ " could not be returned. \n"+ e2.toString(), UID, res); }
+			if (null !== e2) { log("ERROR: "+sFile+ " could not be returned."+EOL+ e2.toString(), UID, res); }
 			else
 			{
 				var sReturn = "";
-				if (d2.length-1 ===  d2.lastIndexOf(",")) { sReturn = d2.substr(0, d2.length-1)+"]"; }
-				else if (d2.length-2 ===  d2.lastIndexOf(",")) { sReturn = d2.substr(0, d2.length-2)+"]"; }
+				if (d2.length-1 === d2.lastIndexOf(",")) { sReturn = d2.substr(0, d2.length-1)+"]"; }
+				else if (d2.length-2 === d2.lastIndexOf(",")) { sReturn = d2.substr(0, d2.length-2)+"]"; }
 				else { sReturn = d2; }
 				log(sReturn, UID, res);
 			}
@@ -1245,12 +1311,12 @@ function returnOBJFile(res, sFile)
 function returnOBJAutoFile(res)
 {
 	if ("" === sFileDefaultObj)
-	{  //noinspection JSUnresolvedFunction
-		mFS.readdir(__dirname, function (e, files)
+	{	//noinspection JSUnresolvedFunction
+		mFS.readdir(process.cwd(), function (e, files)
 		{
 			if (null !== e) { log ("ERROR: "+e.toString(), UID, res); }
 			else
-			{  /* console.log("Files list in current path ", files); */
+			{	/* log("Files list in current path "); log(files); */
 				var Found = files.indexOfAll(sVOBJ);
 				if (-1 === Found) { log("No Auto-Save files to provide.", UID, res); }
 				else if ("number" === typeof(Found)) { returnOBJFile(res, files[Found]); }
@@ -1261,11 +1327,11 @@ function returnOBJAutoFile(res)
 	else
 	{
 		try
-		{  //noinspection JSUnresolvedFunction
+		{	//noinspection JSUnresolvedFunction
 			mFS.readFile(sFileDefaultObj, { "encoding" : "utf8" }, function(err, data)
 			{
 				if (null !== err)
-				{  //noinspection JSUnresolvedFunction
+				{	//noinspection JSUnresolvedFunction
 					mFS.readdir(".", function (e, files)
 					{
 						if (null !== e) { log (e.toString(), UID, res); }
@@ -1274,7 +1340,7 @@ function returnOBJAutoFile(res)
 							var Found = files.indexOfAll(sVOBJ);
 							if (-1 === Found) { log("No Auto-Save files to provide.", UID, res); }
 							else if ("number" === typeof(Found))
-							{  /** ASSES SINGLE FILE FOUND */
+							{	/** ASSES SINGLE FILE FOUND */
 								if (sFileDefaultObj === files.indexOfAll[Found])
 								{ log("No Auto-Save schemed file available to provide.", UID, res); }
 								else { returnOBJFile(res, files.indexOfAll[Found]); }
@@ -1286,8 +1352,8 @@ function returnOBJAutoFile(res)
 				else
 				{
 					var sReturn = "";
-					if (data.length-1 ===  data.lastIndexOf(",")) { sReturn = data.substr(0, data.length-1)+"]"; }
-					else if (data.length-2 ===  data.lastIndexOf(",")) { sReturn = data.substr(0, data.length-2)+"]"; }
+					if (data.length-1 === data.lastIndexOf(",")) { sReturn = data.substr(0, data.length-1)+"]"; }
+					else if (data.length-2 === data.lastIndexOf(",")) { sReturn = data.substr(0, data.length-2)+"]"; }
 					else { sReturn = data; }
 					// if ("]" !== sReturn[sReturn.length-1] || "]" !== sReturn[sReturn.length-2]) { sReturn+="]"; }
 					log(sReturn, UID, res);
@@ -1305,20 +1371,20 @@ function writeOBJFile(aRet, file)
 	var sFile = UID === file ? dX.getFullYear()+"-"+pad(dX.getMonth()+1, 2, true)+"-"+dX.getDate()+"_"+aMonths[dX.getMonth()].toLowerCase() : file ;
 	sFile+= UID === file ? sVOBJ : sUOBJ;
 	if (UID !== file && sFile !== sFileDefaultObj) { sFileDefaultObj = sFile; }
-	var sDate = " @:"+new Date()+" for: "+aRet+" \n";
+	var sDate = " @:"+new Date()+" for: "+aRet+EOL;
 	try
-	{  //noinspection JSUnresolvedFunction
+	{	//noinspection JSUnresolvedFunction
 		mFS.stat(sFile, function(e, stats)
 		{
 			var iStart = (null === e || UID === e) ? stats.size-2 : 0;
 			if ( 0 > iStart) { iStart = 0; }
 			if (0 === iStart)
-			{  //noinspection JSUnresolvedFunction
+			{	//noinspection JSUnresolvedFunction
 				mFS.appendFile(sFile, JSON.stringify(aRet, null, "\t"), "utf8", function (err)
 				{ if (err) { log("ERROR: err -- "+err.toString()); } });
 			}
 			else
-			{  //noinspection JSUnresolvedFunction
+			{	//noinspection JSUnresolvedFunction
 				var fsObj = mFS.createWriteStream(sFile, { start: iStart, "flags" : "r+" });
 				var sTXT = JSON.stringify(aRet, null, "\t");
 				fsObj.write(iStart === 0 ? sTXT : ","+sTXT.substr(1), 0, function(e3)
@@ -1338,22 +1404,24 @@ function writeCLFFile(aCLF, file)
 	var dX = new Date();
 	var sFile = UID === file ? dX.getFullYear()+"-"+pad(dX.getMonth()+1, 2, true)+"-"+dX.getDate()+"_"+aMonths[dX.getMonth()].toLowerCase() : file;
 	sFile+= UID === file ? sVCLF : sUCLF;
-	var sDate = " @:"+new Date()+" for: "+aCLF+" \n";
+	var sDate = " @:"+new Date()+" for: "+aCLF+EOL;
 	try
-	{  //noinspection JSUnresolvedFunction
+	{	//noinspection JSUnresolvedFunction
 		mFS.appendFile(sFile, aCLF, "utf8", function(e)
 		{
 			if (null !== e && UID !== e) { log("ERROR: could not append files: "+sFile+sDate+e.toString()); } //else { /*log("Successfully appended to: "+sFile);*/ }
 		});
 	}
-	catch (err) { console.log(err); log("ERROR: could not append to CLF file: "+sFile+sDate+err.toString()); }
+	catch (err) { log(err.toString()); log("ERROR: could not append to CLF file: "+sFile+sDate+err.toString()); }
 }
 
 /**
- * @return {string}
+ * Public module function
+ * @return {Array}
  */
-function lookup(sIP)
+function lookup(sIP, bCheckDistance, bReturn)
 {
+	var a2Check = [];
 	if ("string" === typeof(sIP))
 	{
 		if (-1 !== sIP.indexOf(","))
@@ -1366,21 +1434,20 @@ function lookup(sIP)
 				else
 				{
 					log(sCR+"ERROR: "+sCN+sCNB+a2s[iX]+sCN+" invalid IPv4/IPv6 address."+EOL);
-					return "ERROR: invalid IPv4/IPv6 address.";
+					return [ "ERROR: invalid IPv4/IPv6 address." ];
 				}
 			}
 		}
 		else
-		{
-			//noinspection JSCheckFunctionSignatures
+		{	//noinspection JSCheckFunctionSignatures
 			if (rgxIP.test(sIP) || rgxIPv6.test(sIP))
-			{  //noinspection JSCheckFunctionSignatures
+			{	//noinspection JSCheckFunctionSignatures
 				a2Check.push({"ip": sIP, "v6": rgxIPv6.test(sIP)});
 			}
 			else
 			{
 				log(sCR+"ERROR: "+sCN+sCNB+sIP+sCN+" invalid IPv4/IPv6 address."+EOL, UID);
-				return "ERROR: invalid IPv4/IPv6 address.";
+				return [ "ERROR: invalid IPv4/IPv6 address." ];
 			}
 		}
 	}
@@ -1389,38 +1456,72 @@ function lookup(sIP)
 		for (var iY in sIP)
 		{
 			if (!sIP.hasOwnProperty(iY)) { continue; }
-
 			//noinspection JSCheckFunctionSignatures
 			if (rgxIP.test(sIP[iY]) || rgxIPv6.test(sIP[iY]))
-			{  //noinspection JSCheckFunctionSignatures
+			{	//noinspection JSCheckFunctionSignatures
 				a2Check.push({"ip": sIP[iY], "v6": rgxIPv6.test(sIP[iY])});
 			}
 			else
 			{
 				log(sCR+"ERROR: "+sCN+sCNB+sIP[iY]+sCN+" invalid IPv4/IPv6 address."+EOL, UID);
-				return "ERROR: invalid IPv4/IPv6 address.";
+				return [ "ERROR: invalid IPv4/IPv6 address." ];
 			}
-
 		}
 	}
 	else
 	{
-		log(sCR+"ERROR: "+sCN+sCNB+sIP+sCN+" is not a valid request.\n");
-		return "ERROR: "+sIP+" is not a valid request.\n";
+		log(sCR+"ERROR: "+sCN+sCNB+sIP+sCN+" is not a valid request."+EOL);
+		return [ "ERROR: "+sIP+" is not a valid request."+EOL];
 	}
-}
 
-function enableupdates()
+	var aRet = [];
+	for (iX=0; iX < a2Check.length; ++iX)
+	{
+		var oRet = {};
+		oRet.ip = a2Check[iX].ip;
+		oRet.date = new Date();
+		//noinspection JSUnresolvedFunction
+		oRet.location = (a2Check[iX].v6) ? mMAX.getLocationV6(a2Check[iX].ip) : mMAX.getLocation(a2Check[iX].ip);
+
+		if (null === oRet.location || UID === oRet.location)
+		{	/* Dont write ... return. */
+			log(sCR+"ERROR: "+sCN+a2Check[iX].ip+sCNB+" invalid address."+EOL+sCN);
+			return [ "ERROR: "+a2Check[iX].ip+" invalid address." ];
+		}
+
+		if (!bNoASN)
+		{	//noinspection JSUnresolvedFunction
+			oRet.asn = (a2Check[iX].v6) ? mMAX.getOrganizationV6(oRet.ip) : mMAX.getOrganization(oRet.ip);
+		}
+
+		if (!bNoTimeZone)
+		{	//noinspection JSUnresolvedVariable
+			oRet.timeZone = mMAXTZ(oRet.location.countryCode, oRet.location.region);
+			if (UID === oRet.timeZone) { oRet.timeZone="unrecognised-timezone"; }
+		}
+
+		if (UID !== typeof(aObjSaveKeys[iX])) { oRet.keyobject = aObjSaveKeys[iX]; }
+		if (UID !== typeof(aClfSaveKeys[iX])) { oRet.keyclf = aClfSaveKeys[iX]; }
+		aRet.push(oRet);
+	}
+
+	if (bCheckDistance) { calculateDistances(aRet); }
+
+	return false === bReturn ? [] : aRet;
+}
+/** Public module function */
+function enableupdates(iHoursUpdate)
 {
 	try
 	{	//noinspection JSUnresolvedFunction
 		mVIPIFS = require("child_process").fork(__dirname+"/vipi_files.js");
 	}
-	catch(e){ log("Issue forking vipi_index.js\n"+e); }
+	catch(e){ log("Issue forking vipi_index.js"+EOL+ e.toString()); }
 
 	var oPS = {"cmd": "start"};
 	if (UID !== sDBPath) {oPS.writedir = sDBPath;}
 	if (UID === args[19][2]) {oPS.update = true;}
+	if (UID !== iHoursUpdate) oA.update_hours = iHoursUpdate;
 	if (bQuiet) {oPS.quiet = true;}
 	mVIPIFS.on("message", function(m) { /*log(m);*/});
 	mVIPIFS.send(oPS);

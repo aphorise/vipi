@@ -43,24 +43,26 @@ setColors();
 var bInstall = false; // in install mode?
 var bForked = false; // process / module in fork use?
 // VARIABLES SPECIFIC TO THIS SCRIPT:
-var iHours=24;	// Numbers of hours before an update.
-var iSecondsUpdate=1000*(60*60);	// 24 hours in milli-seconds for update interval.
+var iHoursUpdate=24;	// Numbers of hours before an update.
+var iSecondsUpdate=1000*(60*60);	// 1 hour in milli-seconds for update interval.
 var iLRemoved = 0;	// number of removed lookups
 var sPort = 80;	// requests default port
 var aColons = []; //array or number to detect all ':'
 var aLookUps = []; // Global looks table for queued checks
 var bChange = false; // Change indicator
-var sP = "Downloading : ";
-var sS = "▀"; var sS0="▓";
+var sP = "Downloading: ";
+var sS = ""; var sS0="░";
 var sS1="▀"; var sS2="║";
-var sS3="▄"; var sS4="░";
+var sS3="▄"; var sS4="█";
+var sS5 = "▓";
+
 var iS = 0;
 var iSep1= 203;
 var iSep2=1;
 /** default request object compositions */
 var oA =
 { /* - O == optional, R == required: */
-/*O*/"writedir"	:	__dirname+"/dbs",
+/*O*/"writedir"	:	__dirname+"/vipi_dbs/",
 /*R*/"json"		:	"vetags.json",
 /*R*/"urlroot"	:	"http://geolite.maxmind.com",
 /*O*/"urlappend":	"/download/geoip/database/",
@@ -75,7 +77,7 @@ var oA =
 	],
 /*O*/"gunzip"	: true,
 /*O*/"update"	: false,
-/*O*/"update_hours"	: 24,
+/*O*/"update_hours"	: iHoursUpdate,
 /*O*/"ERRORS"	: 0,	// occuring errors
 /*O*/"MOVED"	: 0,	// number of files moved.
 /*O*/"MSG"	: ""
@@ -93,24 +95,26 @@ var oOption =
 
 /** for single / messaging where forked */
 function signalIn(m)
-{	//noinspection JSUnresolvedVariable
+{
+	bForked = true ;
+	//noinspection JSUnresolvedVariable
 	if (UID === m || UID === m.cmd) { return process.send({"error" : { "msg": "Invalid request / string." }}); }
 	//noinspection JSUnresolvedVariable
 	if(m.cmd == "start")
-	{
-		bForked = true;
-		//noinspection JSUnresolvedVariable
+	{	//noinspection JSUnresolvedVariable
 		bQUIET = UID !== m.quiet;
 		oA.update = UID !== m.update; // enable update
-		oA.update_hours = UID !== m.update_hours ? m.update_hours : 24 ;
+
 		if (UID !== m.writedir)  { oA.writedir =  m.writedir; }
 		// append / prepend path if passed otherwise use default.
 		oA.json = (UID !== m.json) ? oA.writedir+m.json : oA.writedir+oA.json;
-		process.send({"data" : { "msg": "OK" }});
+		process.send({"data" : { "msg": "OK", "got": oA }});
+		iSecondsUpdate*= (UID !== m.update_hours) ? m.update_hours : oA.update_hours;
+
 		/*¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯*/
 		/** SCHEDULE FIRST RUN IN 24 hours    */
 		/*____________________________________*/
-		setInterval(function (){ Init(oA); }, iSecondsUpdate);
+		setInterval(function() { Init(oA); }, iSecondsUpdate);
 		//Init(oA); //return InitLoad(m);
 	}
 	else
@@ -169,7 +173,8 @@ function BroadCastUpdate()
 		(
 			{
 			"file" : oA.fileso[iX].path, "validurl" : oA.fileso[iX].validurl,
-			"available" : oA.fileso[iX].available, "downloaded" : oA.fileso[iX].downloaded
+			"available" : oA.fileso[iX].available, "downloaded" : oA.fileso[iX].downloaded,
+			"etag" : oA.fileso[iX].etag
 			}
 		);
 		if (oA.fileso[iX].error) { aToReturn[aToReturn.length-1].error = oA.fileso[iX].error; }
@@ -285,7 +290,7 @@ function tickComplete()
 		if (0 === oA.ERRORS)
 		{
 			if (bInstall) { sMSG="\nALL: "+oA.fileso.length+" <- Maxmind DB files ALREADY INSTALLED & upto date @ "+new Date()+"\n"; }
-			else { sMSG="\nNo changes to: "+oA.fileso.length+" files @ "+new Date(); }
+			else { sMSG="\nNo changes to: "+oA.fileso.length+" files @ "+new Date();  }
 		}
 		else { sMSG="\nERRORS: Completed with ISSUES :-( @ : " + new Date() +"\n"; }
 	}
@@ -305,11 +310,15 @@ function tickComplete()
 				mFS.rename(oA.fileso[iX].filename, oA.fileso[iX].writepath, clMoveFile(oA.fileso[iX]));
 			}
 		}
+
 		//noinspection JSUnresolvedFunction
-		mFS.writeFile(oA.json, JSON.stringify(oA.fileso), function(e)
-		{
-			if (e) { log(e.toString()+"\nCan NOT save etags.json"); }
-		});
+		mFS.unlink(oA.json, function(e)
+		{	//noinspection JSUnresolvedFunction
+			mFS.writeFile(oA.json, JSON.stringify(oA.fileso), {"flag": "a"}, function(err)
+			{
+				if (null !== err) { log("ERROR can NOT save etags.json "+e.toString()); }
+			});
+		})
 	}
 	else { BroadCastUpdate(); }
 }
@@ -340,11 +349,26 @@ function DownloadCheck(v, res)
 			ioFile.write(d);
 			oA.fileso[v].downloaded = true;
 			if (bInstall && 0===iS) { log("\nINITIATING DL PROCESS 4m: maxmind.com...\n"); }
-			if (0!==++iS%iSep1) return ;
-			sP=(0 === ++iS%iSep2) ? sP+sCB+sCNB+sS0 : sP;
-			sS=(sS1 === sS) ? sS2 : ( (sS2 === sS) ? sS3 : ((sS3 === sS) ? sS4 : sS1 ) );
-			var sA = ( iS%2 ? sCNB+sCY : sCB+sCNB );
-			log("\033[0G"+(iS%4===1 ?sCDG:sCY)+sP+sA+sS+sCN);
+			if (0!==++iS%iSep1) { return ; }
+
+			if (0 === iS%iSep2)
+			{	//console.log("iS%iSep2 == %s   -- %s % %s", iS%iSep2, iS, iSep2);
+				iSep2+=3;
+				if (sP.length < 320) { sP = sP.replace(sS0, sS5)+sCB+sCNB+sS0; }
+			}
+			//sP=(0 === iS%iSep2) ? sP+sCB+sCNB+sS0+iSep2 : sP;
+			if (sS1 === sS) { sS = sS2; }
+			else
+			{
+				if (sS2 === sS){ sS = sS3; }
+				else
+				{
+					if (sS3 === sS) { sS=sS4; }
+					else { sS=sS1; }
+				}
+			}
+			var sA = ( 0===iS%2 ? sCNB+sCY : sCB+sCNB );
+			log("\033[0G"+(1===iS%4 ? sCDG:sCY)+sP+sA+sS+sCN);
 		}
 		else { oA.fileso[v].downloaded = false; }
 	});
@@ -372,7 +396,7 @@ function clGetFile(v, res)
 {
 	return function (e/*, sPath*/)
 	{
-		if (e) { DownloadCheck(v, res); }
+		if (null !== e) { DownloadCheck(v, res); }
 		else
 		{
 			oA.fileso[v].available = true;
@@ -400,9 +424,9 @@ function clHttpParse(v)
 		{
 			oA.fileso[v].validurl = true;
 			/* Check whether files is present via e-tag histotry or is already at location - otherwise download */
-			if (oA.fileso[v].etag !== res.headers.etag){ DownloadCheck(v, res); }
+			if (oA.fileso[v].etag !== res.headers.etag) { DownloadCheck(v, res); }
 			else
-			{ //noinspection JSUnresolvedFunction
+			{	//noinspection JSUnresolvedFunction
 				mFS.realpath(oA.fileso[v].writepath, clGetFile(v, res));
 			}
 		}
@@ -439,7 +463,9 @@ function InitPaths()
 	});
 }
 
-/** loads former files collected on last run or before crash / stop */
+/** loads former files collected on last run or before crash / stop
+ * @return {boolean}
+ */
 function InitLoad()
 {
 	if (UID !== oA.json && GetFileRealPath(oA.json))
@@ -447,16 +473,19 @@ function InitLoad()
 		var oldReads = mFS.readFileSync(oA.json, "utf8");
 		var oldFiles = [];
 		if (2 < oldReads.length) { oldFiles = JSON.parse(oldReads); /* log("\nReloaded OLD JSON.\n");*/ }
+		var iEtags = 0;
 		for (var iX=0; iX < oldFiles.length; ++iX)
 		{
 			for (var iY=0; iY < oA.fileso.length; ++iY)
 			{
-				if (oldFiles[iX].path === oA.fileso[iY].path){ oA.fileso[iY].etag = oldFiles[iX].etag; break; }
+				if (oldFiles[iX].path === oA.fileso[iY].path){ oA.fileso[iY].etag = oldFiles[iX].etag; ++iEtags; break;  }
 			}
 		}
+		return !(oldFiles.length === iEtags);
 	}
+	else return true;
 }
-
+var bFirstRun = true;
 /*¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯*/
 /** MAIN INIT                         */
 /*____________________________________*/
@@ -484,7 +513,7 @@ function Init(oAR)
 	if (UID === oA.fileso) { oA.fileso = []; }
 	oOption = { "hostname" : oA.urlroot, "port" : sPort, "method" : "GET" };
 	/* construct requests objects if not already set */
-	if (UID !== oA.fileso)
+	if (UID === oA.fileso || 0 === oA.fileso.length)
 	{
 		for (var iX=0; iX < oA.files.length; ++iX)
 		{
@@ -506,28 +535,28 @@ function Init(oAR)
 		}
 	}
 
-	InitPaths(); InitLoad();
-
-	/* DO requests for all fileso... */
-	for (iX=0; iX < oA.fileso.length; ++iX)
-	{	//noinspection JSUnresolvedFunction
-		var req = mHTTP.request(oA.fileso[iX], clHttpParse(iX));
-		req.on("error", clHttpError(iX)); req.end(0);
+	InitPaths();
+	if (InitLoad())
+	{
+		/* DO requests for all fileso... */
+		for (iX=0; iX < oA.fileso.length; ++iX)
+		{	//noinspection JSUnresolvedFunction
+			var req = mHTTP.request(oA.fileso[iX], clHttpParse(iX));
+			req.on("error", clHttpError(iX)); req.end(0);
+		}
 	}
 
-	if (UID !== oA.update && true === oA.update)
-	{
-		// invoked once so delete to prevent recall on each itteration.
-		delete (oA.update);
-		iSecondsUpdate*= (UID !== oA.update_hours) ? oA.update_hours : iHours;
-		updateOnTimer(oA);
+	if (UID !== oA.update && true === oA.update && true === bFirstRun)
+	{	// invoked once at start if applicable
+		bFirstRun = false;
+		updateOnTimer();
 	}
 } //Init(oA);
 
 /*¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯*/
 /** TIMER BASED RE-RUN TO UPDATE      */
 /*____________________________________*/
-function updateOnTimer(oA)
+function updateOnTimer()
 {
 	var fTimer = function (){ /*log("oA ==== \n" +JSON.stringify(oA));*/ Init(oA); };
 	setInterval(fTimer, iSecondsUpdate);
@@ -543,6 +572,7 @@ if (-1 !== process.argv.indexOf("--install") || -1 !== process.argv.indexOf("-i"
 	var iP1 = process.argv.indexOf("--install");
 	var iP2 = process.argv.indexOf("-i");
 	var iPath = -1 !== iP1 ? iP1 : iP2;
+
 	if (UID !== process.argv[iPath+1])
 	{
 		var sDBPath = process.argv[iPath+1];

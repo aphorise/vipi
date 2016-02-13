@@ -1,18 +1,19 @@
 {
 	"name": "vipi",
-	"version": "0.0.1",
+	"version": "0.0.2",
 	"license": "GPL-3.0",
 	"author": "aphorise",
 	"contributors": [{ "name" : "Mehdi Ahmadi" , "email" : "mehdi@vigour.io", "url" : "http://#" }],
 	"description": "Visitor IP Information using Maxmind DB's to list geographic info of quiried IPv4 & IPv6.",
 	"main": "./vipi.js",
 	"man" : "./vipi.1.gz",
-	"bin": { "vipi": "./vipi.js" },
+	"bin": { "vipi": "./vipi.js", "vipi_files" : "./vipi_files.js", "vipi_benchmark" : "./vipi_benchmark.js"},
 	"files":
 	[
 		"HISTORY.md",
 		"README.md",
 		"vipi.1.gz",
+		"vipi_benchmark.js",
 		"vipi_files.js",
 		"vipi.js"
 	],
@@ -20,7 +21,8 @@
 	{
 		"postinstall": "node vipi_files.js --install",
 		"start": "node vipi.js -d",
-		"test": "echo 'To test from cli prompt run: vipi 8.8.8.8' && exit 0"
+		"test": "echo 'To test from cli prompt run: vipi 8.8.8.8' && exit 0",
+		"benchmark": "node vipi_benchmark.js"
 	},
 	"keywords":
 	[
