@@ -1,6 +1,6 @@
 {
 	"name": "vipi",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"license": "GPL-3.0",
 	"author": "aphorise",
 	"contributors": [{ "name" : "Mehdi Ahmadi" , "email" : "mehdi@vigour.io", "url" : "http://#" }],
@@ -26,8 +26,8 @@
 	},
 	"keywords":
 	[
-		"IP", "IPv4", "IPv6", "GeoIP", "clf", "common-log-format", "logs",
-		"latitude", "longtitude","gps", "country", "city", "ip-lookup", "distance", "node.js"
+		"IP", "IPv4", "IPv6", "GeoIP", "clf", "common-log-format", "logs", "maxmind",
+		"latitude", "longtitude","gps", "country", "city", "ip-lookup", "distance", "session", "node.js"
 	],
 	"readmeFilename": "README.md",
 	"repository": { "type": "git", "url": "ssh://git@github.com:vigour-io/vipi.git" },

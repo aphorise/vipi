@@ -1,5 +1,5 @@
+#!/usr/bin/env node
 /** shorthand variables & convenience function */
-//var UID = "undefined";
 var UID = undefined;
 var iERROR=0;
 var bQUIET = false;

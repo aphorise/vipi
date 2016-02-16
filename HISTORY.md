@@ -1,3 +1,12 @@
+### `0.0.3` / 2016-02-16
+
+  * adjusted #!/ directives to use env (for nave and none default node.js users)
+  * fixed invoked vipi_files.js from vipi.js to be called direct so as to use pwd / cwd instead of __dirname 
+  * vipi_benchmark to use npm availble DB files. 
+  * RPI-1 benchmark data included for fun.
+
+
+------------------------------------------
 ### `0.0.2` / 2016-02-12
 
   * fixed automatic / indefinate update in daemon (every 24 hours).

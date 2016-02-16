@@ -1,4 +1,4 @@
-#!/usr/local/bin/node
+#!/usr/bin/env node
 /** Bench mark testing a high volume if requests to give an indiacation of quiery rate: */
 var f_SysT1=Date.now()/1000; //start time for measuring init times
 var _IPS =
@@ -9100,7 +9100,11 @@ var _IPS =
 /* Test Package(s) */
 //----------------------------------------------------------------
 var mVIPI;
-try{ mVIPI = require("./vipi.js"); }
+try
+{
+	process.chdir(__dirname);
+	mVIPI = require("vipi");
+}
 catch (e){ console.log("Core VIPI module / File missing!"+"\n"+e); process.exit(1); }
 //----------------------------------------------------------------
 console.log("Doing lookups of: ", _IPS.length, " IPs ...");

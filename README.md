@@ -1,5 +1,5 @@
 # `V`isitor `IP` `I`nfo (`vipi`)
-###### Relevant [**licenses**] should be properly considered in commercial and none free use cases / environments.
+###### Relevant [**licenses**] should be properly considered in commercial and non-free use cases / environments.
 
 `vipi` is a [**`Node.js`**] utility leveraging [_`Maxmind`_] *__GeoIP__* *DB* as well [**`npm maxmind`**] to provide known info of each `IP`'s:
  - Location (Country, City, etc)
@@ -78,19 +78,19 @@ vipi 208.67.222.222 -sf=S3141_user -skc='200 "GET / HTTP/1.1" -sko='{"x":9}'
 # log OBJ & CLF to specified file 'S3141_user' session file(s)
 ```
 
-Logs are savd to the specified absolute or relative path from which execution occured (`pwd` / `cwd`).
+Logs are savd to the specified absolute or relative path from where execution occured (`pwd` / `cwd`).
 
 
 ### `daemon` / HTTP Server
 
-To execute `vipi` as web daemon either `-d` / `--daemon`  or `-dp` / `--dipport` options are required such as:
+To execute `vipi` in web / daemon either `-d`, `--daemon`  or `-dp`, `--dipport` options are required such as:
 
 ```shell
 vipi -d				# // default mode
 vipi -dp=127.0.0.1:65534	# // custom IP:PORT binding
 ```
 
-Default daemon options allow for read, write and return to be freely available; thus post launch - visiting the address of the instance in a browser without any option ( or with `!_help` `||` `!_h` parameter) should yield a brief of usage and available parameters. Eg:
+Default daemon options allow for read, write and return to be freely available; post launch - visiting the address of the instance in a browser without any option ( or with `!_help` `||` `!_h` parameter) should yield a brief of usage and available parameters. Eg:
 
 ```shell
 curl 127.0.0.1:59999	# will output:
@@ -209,7 +209,7 @@ Other quiried requests which do not result in an error are not returned; this sh
 ### Performance
 
 A performance of `~` `100,000` to `300,000` lookups per second can be expected in non-daemon / http modes with most modern (2015) `x64` computers subject to available resources including the `node.js` version, hardware specification such as `DDR` as well as other architectural consideration.
-Daemon / http mode - are limited by the asynchronous and single process nature of `Node.js` and so any concurrency beyond `100,000` is unlikely and advised against; for greater concurrent volumes of lookups consider load-balancing / running multiple version of the service.
+Daemon / http mode - are limited by the asynchronous and single process nature of `Node.js`; thus any concurrency beyond `100,000` is unlikely and not recommended; for greater concurrent volumes of lookups consider load-balancing / running multiple version of the service.
 
 
 ### Benchmarking
@@ -244,7 +244,7 @@ vipi_benchmark
 ```sh
 cat /proc/cpuinfo && sudo dmidecode --type 17 ; # or 'hwinfo' 
 # CPU - Model: Intel(R) Core(TM) i7-5820K CPU @ 3.30GHz
-#  Clock: 3591 MHz
+#  Clock: 2400 MHz
 #  L1 Cache: 64 kb
 #  L2 Cache: 256 kb
 #  L3 Cache: 2560 kb
@@ -260,6 +260,27 @@ vipi_benchmark
 # LOOKUP Time in Seconds: 1.502000093460083 
 # TOTAL execution Time: 1.569000005722046 
 # EXPECTED lookups a sec: 66577.89199575545
+```
+
+#### Raspberry Pi 1 model B+
+```sh
+cat /proc/cpuinfo && sudo dmidecode --type 17 ; # or 'hwinfo' 
+# CPU - Model: 700 MHz single-core ARM1176JZF-S
+#  Clock: 600 MHz
+#  L1 Cache: 16 kb
+#  L2 Cache: 128 kb
+# ------- 
+# MEMORY - Type: SDRAM
+#  Speed: 400 MHz
+
+vipi_benchmark
+
+# Doing lookups of:  100000  IPs ...
+# Completed approximately: 300000 operations (location, timezone & asn lookups) 
+# IP READ Time in Seconds: 3.819999933242798
+# LOOKUP Time in Seconds: 510.35199999809265
+# TOTAL execution Time: 514.1749999523163
+# EXPECTED lookups a sec: 195.94319215046426
 ```
 
 
@@ -299,7 +320,7 @@ This type of testing is limited by the servomechanism of `loopback` (`127.0.0.1`
 
 
 ### Version
-0.0.2
+0.0.3
 
 
 License

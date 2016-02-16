@@ -1,4 +1,4 @@
-#!/usr/local/bin/node
+#!/usr/bin/env node
 var UID = undefined; /**shorthand undefined*/
 var EOL="\n"; var TAB="\t";
 var f_SysT1=Date.now()/1000; //start time for measuring init times
@@ -557,7 +557,7 @@ function initLoad()
 		// Custom path & noupdate disabled by default.
 		if (UID !== args[25][2] || (UID === args[19][2] && bNewDBPath && UID !== sDBPath) || (UID !== args[4][2] || UID !== args[6][2]))
 		{
-			var sExec = "node "+ __dirname+"/vipi_files.js -i "+sDB;
+			var sExec = "vipi_files -i "+sDB;
 			if (bQuiet) { sExec+=" -q"; }
 			var psOptions = { stdio: [0, 1, process.stdout], cwd : process.cwd(), env: {"LC_ALL":"C"} };
 			try
