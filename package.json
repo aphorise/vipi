@@ -1,15 +1,24 @@
 {
 	"name": "vipi",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"license": "GPL-3.0",
 	"author": "aphorise",
-	"contributors": [{ "name" : "Mehdi Ahmadi" , "email" : "mehdi@vigour.io", "url" : "http://#" }],
-	"description": "Visitor IP Information using Maxmind DB's to list geographic info of quiried IPv4 & IPv6.",
+	"contributors": [
+		{
+			"name": "Aphorise",
+			"email": "aphorise@gmail.com",
+			"url": "http://#"
+		}
+	],
+	"description": "Visitor IP Information using Maxmind DB's to list geographic info of queried IPv4 & IPv6.",
 	"main": "./vipi.js",
-	"man" : "./vipi.1.gz",
-	"bin": { "vipi": "./vipi.js", "vipi_files" : "./vipi_files.js", "vipi_benchmark" : "./vipi_benchmark.js"},
-	"files":
-	[
+	"man": "./vipi.1.gz",
+	"bin": {
+		"vipi": "./vipi.js",
+		"vipi_files": "./vipi_files.js",
+		"vipi_benchmark": "./vipi_benchmark.js"
+	},
+	"files": [
 		"HISTORY.md",
 		"README.md",
 		"vipi.1.gz",
@@ -17,23 +26,55 @@
 		"vipi_files.js",
 		"vipi.js"
 	],
-	"scripts":
-	{
+	"scripts": {
 		"postinstall": "node vipi_files.js --install",
 		"start": "node vipi.js -d",
 		"test": "echo 'To test from cli prompt run: vipi 8.8.8.8' && exit 0",
 		"benchmark": "node vipi_benchmark.js"
 	},
-	"keywords":
-	[
-		"IP", "IPv4", "IPv6", "GeoIP", "clf", "common-log-format", "logs", "maxmind",
-		"latitude", "longtitude","gps", "country", "city", "ip-lookup", "distance", "session", "node.js"
+	"keywords": [
+		"IP",
+		"IPv4",
+		"IPv6",
+		"GeoIP",
+		"clf",
+		"common-log-format",
+		"logs",
+		"maxmind",
+		"latitude",
+		"longitude",
+		"gps",
+		"country",
+		"city",
+		"ip-lookup",
+		"distance",
+		"session",
+		"node.js"
 	],
 	"readmeFilename": "README.md",
-	"repository": { "type": "git", "url": "ssh://git@github.com:vigour-io/vipi.git" },
+	"repository": {
+		"type": "git",
+		"url": "ssh://git@github.com:aphorise/vipi.git"
+	},
 	"preferGlobal": true,
-	"os" : [ "darwin", "linux", "debian", "win32" ],
-	"cpu" : [ "x64", "ia32", "arm", "mips" ],
-	"engine": { "node": ">=0.12.1", "npm": ">=2.1.1" },
-	"dependencies": { "maxmind": ">=0.6.0" }
+	"os": [
+		"darwin",
+		"linux",
+		"debian",
+		"win32"
+	],
+	"cpu": [
+		"x64",
+		"ia32",
+		"arm",
+		"mips"
+	],
+	"engine": {
+		"node": ">=0.12.1",
+		"npm": ">=2.1.1"
+	},
+	"dependencies": {
+		"maxmind": "=0.6.0",
+		"tar-stream": "^2.2.0"
+	}
 }

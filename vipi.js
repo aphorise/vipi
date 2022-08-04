@@ -3,7 +3,7 @@ var UID = undefined; /**shorthand undefined*/
 var EOL="\n"; var TAB="\t";
 var f_SysT1=Date.now()/1000; //start time for measuring init times
 var sPROJECT="vipi";
-var sVERSION = "v0.0.2";
+var sVERSION = "v0.0.4";
 var bQuiet = false;
 var bNoReturn = false; /* MODE: -dno || --dnooutput (7) */
 var mVIPIFS, mVIPIFILES, mMAX, mMAXTZ, mPATH, mFS, mHTTP, mURL, mOS, mPS; // npm module references
@@ -41,7 +41,7 @@ Object.defineProperty(Array.prototype, 'indexOfAll',
 });
 
 /** Zero pads numeric value to required length.
- * @param num Number|String the meric value to be padded.
+ * @param num Number|String the numeric value to be padded.
  * @param size Number the required length
  * @param signed true|false optional indicator for +/- signed
  * @return String padded value with or without sign
@@ -64,7 +64,7 @@ function isTerminal()
 	return Boolean(process.stdout.isTTY) || (UID !== process.env.TERM && "xterm-256color" === process.env.TERM);
 }
 
-/** true|false whether enviroment output (eg stdio) supports colours */
+/** true|false whether environment output (eg stdio) supports colours */
 var bTTY = isTerminal();
 
 /** strip TTY ANSI colours for no TTY */
@@ -139,7 +139,7 @@ var bDeleteAccess = true; /* MODE: -dad || --dallowdelete (4) */
 var bNoASN = false; /* MODE: -dxa ||--dxasnumber (11) */
 var bNoLocation = false; /* MODE: -dxl || --dxlocation (12) */
 var bNoTimeZone = false; /* MODE: -dxt || --dxtimezone(13) */
-var bNoIPQuiry = false; /* MODE: -dxq" || --dxquiry (14) */
+var bNoIPQuiry = false; /* MODE: -dxq" || --dxquery (14) */
 var bNoUA = false; /* MODE: -dxu" || --dxua (15) */
 var bNoCLF = false; /* MODE: -nc || --noclf (17) */
 var sDBPath;	/* Custome DB PATHS */
@@ -165,7 +165,7 @@ var args =
 /*12*/[["-dxa", "--dxasn", "/dxa"], "(daemon) Exclude ASN from queries or saves by default."],
 /*13*/[["-dxl", "--dxlocate", "/dxl"], "(daemon) Exclude Location info from queries or saves by default."],
 /*14*/[["-dxt", "--dxtime", "/dxt"], "(daemon) Exclude timezone from queries or saves by default."],
-/*15*/[["-dxq", "--dxquiry", "/dxq"], "(daemon) Used with -dur to disable !_= functionality for ip lookup string."],
+/*15*/[["-dxq", "--dxquery", "/dxq"], "(daemon) Used with -dur to disable !_= functionality for ip lookup string."],
 /*16*/[["-dxu", "--dxua", "/dxu"], "(daemon) Exclude User-Agents from queries or saves by default."],
 /*17*/[["-dur", "--duserefer", "/dur"], "(daemon) Use details from referal / dialling cURL."],
 /*18*/[["-nc", "--noclf", "/nc"], "(daemon & cli) Disables CLF related saves with -sa & -sf parameters."],
@@ -180,7 +180,7 @@ var args =
 /*27*/[["-v", "--version", "/v"], "Output version information & exit."],
 /*28*/[["-xi", "--xinfo", "/xi"], "Show OS / Node.js / Maxmind DB related info & exit."]
 ];
-/** Header String appropraitely set for CLI & HTTP Plain mode. Can be extended for HTML as well.*/
+/** Header String appropriately set for CLI & HTTP Plain mode. Can be extended for HTML as well.*/
 function stringHeader()
 {
 	var sR = "";
@@ -190,7 +190,7 @@ function stringHeader()
 	sR+= sCN+TAB+sCNB+sCW+sPROJECT+sCN+" - "+sCDG+sVERSION+EOL+sCN;
 	return sR;
 }
-/** HTTP deamon mode header string adjuster for quiry-string parameter addition and removal of non-related args.*/
+/** HTTP daemon mode header string adjuster for query-string parameter addition and removal of non-related args.*/
 function appHeaderString()
 {	// adjust colours to current mode.? offset to init // setColours();
 	sArgs ="";
@@ -233,10 +233,10 @@ function appHeaderString()
 	{
 		sUage+= EOL+"Usage (?!_=...):"+EOL;
 		sUage+= TAB+"http://"+sCNB+sIP+":"+sPORT+sCN+"/?!_=ua"+TAB+TAB+"# use the inquiring address instead of ip."+EOL;
-		sUage+= TAB+"http://"+sCNB+sIP+":"+sPORT+sCN+"/?!_=208.67.222.222"+TAB+TAB+"# quiry & get results in text/plain"+EOL;
+		sUage+= TAB+"http://"+sCNB+sIP+":"+sPORT+sCN+"/?!_=208.67.222.222"+TAB+TAB+"# query & get results in text/plain"+EOL;
 		sUage+= TAB+"http://"+sCNB+sIP+":"+sPORT+sCN+"/?!_=208.67.222.222,8.8.8.8,8.8.4.4"+TAB+"# multiple ip loolup."+EOL;
 		sUage+= TAB+"http://"+sCNB+sIP+":"+sPORT+sCN+"/?!_=8.8.8.8&!_sa&!_sko=%7B%7D"+TAB+"# Auto save queried IP + key to file."+EOL;
-		sUage+= EOL+"(&) Quiry String / Get-Parameters:"+EOL+sArgs+EOL;
+		sUage+= EOL+"(&) Query String / Get-Parameters:"+EOL+sArgs+EOL;
 	}
 	else
 	{
@@ -285,7 +285,7 @@ function cbcFileStat(sFile)
 {
 	return function(err, stats)
 	{
-		if (err) { log(sCR+"ERROR:"+sCN+" unable to get DB version for :"+sFile+" "+sCDG+err.toString()+sCN); return ; }
+		if (err) { log(sCR+"ERROR:"+sCN+" unable to get DB version for :"+sFile+" "+sCDG+err.toString()+sCN); return; }
 		var iFileSize = stats["size"];
 		//var fd =
 		mFS.open(sFile, "r", cbcFileReadTail(sFile, iFileSize));
@@ -341,7 +341,7 @@ function clDestruct(iCode)
 	return function(i)
 	{
 		var sQUIT = "";
-		if (UID === iCode) return ;
+		if (UID === iCode) return;
 		if (0 !== iCode && 0 !== i)
 		{
 			bTTY = isTerminal();
@@ -379,7 +379,7 @@ function calculateDistances(aRet)
 function initLoad()
 {
 	var a2Check = [];
-	var iX; // GENERAL COUNTER
+	var iX;  // GENERAL COUNTER
 	var sPathSaveFile;
 	var bNewDBPath = false;
 
@@ -710,7 +710,7 @@ function initLoad()
 		bLogAll = UID !== args[17][2];
 		/** MODE: -dnr || --dnoread */
 		bReadAccess = UID === args[9][2];
-		/** MODE: -dxq || --dxquiry */
+		/** MODE: -dxq || --dxquery */
 		bNoIPQuiry = UID !== args[15][2];
 		try
 		{
@@ -752,8 +752,8 @@ function HttpHandle(req, res)
 	var _GET = mURL.parse(req.url,true).query;
 
 	/* MODE: -djs || --djson - OVERLOOK RIGHTS */
-	bJson = (UID === _GET["!_js"] && UID === _GET["!_json"]) ? UID !== args[6][2] : true ;
-	if (bJson) { bJson = (UID === _GET["!_pt"] && UID === _GET["!_plaintext"]) ? UID !== args[6][2] : false ; }
+	bJson = (UID === _GET["!_js"] && UID === _GET["!_json"]) ? UID !== args[6][2] : true;
+	if (bJson) { bJson = (UID === _GET["!_pt"] && UID === _GET["!_plaintext"]) ? UID !== args[6][2] : false; }
 	/* MODE: -dno || --dnooutput - OVERLOOK RIGHTS */
 	bNoReturn = UID === _GET["!_nr"] && UID === _GET["!_noreturn"] ? UID !== args[8][2] : true;
 	/* MODE: -nc || --noclf (9) */
@@ -818,11 +818,11 @@ function HttpHandle(req, res)
 		delete(oRHeader["Transfer-Encoding"]);
 		oRHeader["Content-Length"] = sReturn.length;
 		log(sReturn, UID, res);
-		return ;
+		return;
 	}
 
 	/* !_ls or !_listsaves pass to function to return listing. */
-	if (bReadAccess && UID !== _GET["!_ls"] || UID !== _GET["!_listsaves"]) { returnFilesList(res); return ; }
+	if (bReadAccess && UID !== _GET["!_ls"] || UID !== _GET["!_listsaves"]) { returnFilesList(res); return; }
 
 	if (bReadAccess && UID !== _GET["!_ra"] || UID !== _GET["!_readauto"])
 	{
@@ -1368,7 +1368,7 @@ function returnOBJAutoFile(res)
 function writeOBJFile(aRet, file)
 {
 	var dX = new Date();
-	var sFile = UID === file ? dX.getFullYear()+"-"+pad(dX.getMonth()+1, 2, true)+"-"+dX.getDate()+"_"+aMonths[dX.getMonth()].toLowerCase() : file ;
+	var sFile = UID === file ? dX.getFullYear()+"-"+pad(dX.getMonth()+1, 2, true)+"-"+dX.getDate()+"_"+aMonths[dX.getMonth()].toLowerCase() : file;
 	sFile+= UID === file ? sVOBJ : sUOBJ;
 	if (UID !== file && sFile !== sFileDefaultObj) { sFileDefaultObj = sFile; }
 	var sDate = " @:"+new Date()+" for: "+aRet+EOL;

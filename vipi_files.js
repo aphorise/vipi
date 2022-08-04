@@ -3,13 +3,14 @@
 var UID = undefined;
 var iERROR=0;
 var bQUIET = false;
+
 //----------------------------------------------------------------
-/** Packages Required:                                          */
+/** Packages Required: */
 //----------------------------------------------------------------
-var mHTTP, mFS, mZLIB;
+var mHTTP, mFS, mZLIB, mTAR;
 try
 {	//noinspection JSUnresolvedFunction
-	mFS = require("fs"); mZLIB = require("zlib");
+	mFS = require("fs"); mZLIB = require("zlib"); mTAR = require('tar-stream');
 	process.on("message", signalIn);
 	exports = module.exports = {"Init" : Init};
 }
@@ -43,6 +44,7 @@ setColors();
 var bInstall = false; // in install mode?
 var bForked = false; // process / module in fork use?
 // VARIABLES SPECIFIC TO THIS SCRIPT:
+var tarExtract = undefined;	// for tar extraction.
 var iHoursUpdate=24;	// Numbers of hours before an update.
 var iSecondsUpdate=1000*(60*60);	// 1 hour in milli-seconds for update interval.
 var iLRemoved = 0;	// number of removed lookups
@@ -57,24 +59,44 @@ var sS3="▄"; var sS4="█";
 var sS5 = "▓";
 
 var iS = 0;
-var iSep1= 203;
+var iSep1= 32;
 var iSep2=1;
-/** default request object compositions */
-var oA =
+
+/** default request object compositions for Legacy .db files previously from maxmind site */
+oA =
 { /* - O == optional, R == required: */
 /*O*/"writedir"	:	__dirname+"/vipi_dbs/",
 /*R*/"json"		:	"vetags.json",
-/*R*/"urlroot"	:	"http://geolite.maxmind.com",
-/*O*/"urlappend":	"/download/geoip/database/",
+/*R*/"urlroot"	:	"https://mailfud.org",
+/*R*/"urlappend":	"/geoip-legacy/",
+/*O*/"urlappends":	UID,
+//^^ in case of different sub paths per file on URL [ "/city", "/city", "/asn", "/asn", "/country", "/country" ],
+/*O*/"writedir_appends":	UID,
+//^^ issues in case of same named source files set: [ "/city", "/city", "/asn", "/asn", "/country", "/country" ],
+/*O*/"files_query_string":	"",
 /*R*/"files"	:
 	[
-	/*-*/"GeoIPv6.dat.gz",
-	/*-*/"GeoLiteCity.dat.gz",
-	/*-*/"asnum/GeoIPASNum.dat.gz",
-	/*-*/"asnum/GeoIPASNumv6.dat.gz",
-	/*-*/"GeoLiteCountry/GeoIP.dat.gz",
-	/*-*/"GeoLiteCityv6-beta/GeoLiteCityv6.dat.gz"
+	/*-*/"GeoIPCity.dat.gz",
+	/*-*/"GeoIPCityv6.dat.gz",
+	/*-*/"GeoIPASNum.dat.gz",
+	/*-*/"GeoIPASNumv6.dat.gz",
+	/*-*/"GeoIP.dat.gz",
+	/*-*/"GeoIPv6.dat.gz"
 	],
+/*O*/"outfiles"	:
+	[
+	/*-*/"GeoLiteCity.dat",
+	/*-*/"GeoLiteCityv6.dat",
+	/*-*/"GeoIPASNum.dat",
+	/*-*/"GeoIPASNumv6.dat",
+	/*-*/"GeoIP.dat",
+	/*-*/"GeoIPv6.dat"
+	],
+/*R*/"query_strings"	:	"",
+/*R*/"files_ext":	".dat.gz",
+/*RO*/"files_tar_match":	"NOT APPLICABLE",
+/*RO*/"files_gzp_match":	".dat",
+/*O*/"guntar"	: false,
 /*O*/"gunzip"	: true,
 /*O*/"update"	: false,
 /*O*/"update_hours"	: iHoursUpdate,
@@ -82,6 +104,22 @@ var oA =
 /*O*/"MOVED"	: 0,	// number of files moved.
 /*O*/"MSG"	: ""
 };
+// example of alternative source:
+// oA =
+// {
+// 	/*O*/"writedir"	:	__dirname+"/vipi_dbs/", /*R*/"json"		:	"vetags.json",
+// 	/*R*/"urlroot"	:	"https://dl.miyuru.lk", /*R*/"urlappend":	"/geoip/maxmind",
+// 	/*O*/"urlappends":	[ "/city", "/city", "/asn", "/asn", "/country", "/country" ],
+// 	/*O*/"writedir_appends":	[ "/city", "/city", "/asn", "/asn", "/country", "/country" ],
+// 	/*O*/"files_query_string":	"",
+// 	/*R*/"files"	: [ /*-*/"maxmind4.dat.gz", /*-*/"maxmind6.dat.gz", /*-*/"maxmind4.dat.gz", /*-*/"maxmind6.dat.gz", /*-*/"maxmind4.dat.gz", /*-*/"maxmind6.dat.gz" ],
+// 	/*O*/"outfiles"	: [ /*-*/"GeoLiteCity.dat", /*-*/"GeoLiteCityv6.dat", /*-*/"GeoIPASNum.dat", /*-*/"GeoIPASNumv6.dat", /*-*/"GeoIP.dat", /*-*/"GeoIPv6.dat" ],
+// 	/*R*/"query_strings"	:	"", /*R*/"files_ext":	".dat.gz", /*RO*/"files_tar_match":	"NOT APPLICABLE", /*RO*/"files_gzp_match":	".dat",
+// 	/*O*/"guntar"	: false, /*O*/"gunzip"	: true,
+// 	/*O*/"update"	: false, /*O*/"update_hours"	: iHoursUpdate,
+// 	/*O*/"ERRORS"	: 0, /*O*/"MOVED"	: 0, /*O*/"MSG"	: ""
+// };
+
 /** template oOption per file with optional .gunzippath & writepath */
 var oOption =
 { /*
@@ -96,7 +134,7 @@ var oOption =
 /** for single / messaging where forked */
 function signalIn(m)
 {
-	bForked = true ;
+	bForked = true;
 	//noinspection JSUnresolvedVariable
 	if (UID === m || UID === m.cmd) { return process.send({"error" : { "msg": "Invalid request / string." }}); }
 	//noinspection JSUnresolvedVariable
@@ -105,15 +143,15 @@ function signalIn(m)
 		bQUIET = UID !== m.quiet;
 		oA.update = UID !== m.update; // enable update
 
-		if (UID !== m.writedir)  { oA.writedir =  m.writedir; }
+		if (UID !== m.writedir) { oA.writedir = m.writedir; }
 		// append / prepend path if passed otherwise use default.
 		oA.json = (UID !== m.json) ? oA.writedir+m.json : oA.writedir+oA.json;
 		process.send({"data" : { "msg": "OK", "got": oA }});
 		iSecondsUpdate*= (UID !== m.update_hours) ? m.update_hours : oA.update_hours;
 
-		/*¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯*/
-		/** SCHEDULE FIRST RUN IN 24 hours    */
-		/*____________________________________*/
+		/*¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯*/
+		/** SCHEDULE FIRST RUN IN 24 hours **/
+		/*__________________________________*/
 		setInterval(function() { Init(oA); }, iSecondsUpdate);
 		//Init(oA); //return InitLoad(m);
 	}
@@ -169,6 +207,7 @@ function BroadCastUpdate()
 	for (iX=0; iX < oA.fileso.length; ++iX)
 	{
 		if (oA.fileso[iX].error || !oA.fileso[iX].available) { bSuccess=false; }
+		if (oA.fileso[iX].error) { oA.MSG+= oA.fileso[iX].error; }
 		aToReturn.push
 		(
 			{
@@ -191,8 +230,17 @@ function BroadCastUpdate()
 			var sMSG = "";
 			if (0 === oA.ERRORS)
 			{
-				if (oA.gunzip && bChange){ sMSG = "\nSuccesfully - GUnzip-ed files.\n"; }
+				if (oA.gunzip && bChange){ sMSG = "\nSuccessfully - GUnzip-ed files.\n"; }
 				if (bChange && bInstall) { sMSG+= "GeoIP DB Files written to: "+sCW+oA.writedir+"\n"+sCN; }
+			}
+			else
+			{
+				// any HTTP-30x or HTTP-50x is possible issue with web servers like:
+				// IP based rate limiting - suggest retry.
+				
+				sMSG = (-1 !== oA.MSG.indexOf("HTTP: 30") || -1 !== oA.MSG.indexOf("HTTP: 50")) ? 
+					oA.MSG+sCNB+sCR+"ERROR:"+sCN+sCR+" " + oA.urlroot + " site unavailable or rate limit due to too many downloads. Retry again later.\n"+sCN :
+					oA.MSG+sCNB+sCR+"ERROR:"+sCN+sCR+" Issues with GeoIP DB archives sources. Retry again later.\n"+sCN;
 			}
 			if (!bInstall) { sMSG+="\n"+JSON.stringify(oToReturn, null, "  "); }
 			log(sMSG);
@@ -216,6 +264,41 @@ function BroadCastUpdate()
 	bChange = false;
 }
 
+
+/** closure function for decompression post move / write of final write */
+function clUntarFile(v)
+{
+	// get a new extract event emitter
+	tarExtract = mTAR.extract();	// for tar extraction.
+	tarExtract.on("entry", function(tarHeader, tarStream, tarNext)
+	{
+		if (-1 !== tarHeader.name.indexOf(oA.files_tar_match))
+		{
+			var aFileNameUntar = tarHeader.name.split("/");
+			var sFileNameUntar = oA.writedir + aFileNameUntar[aFileNameUntar.length-1];
+			//noinspection JSUnresolvedFunction
+			var fsFileOutTar = mFS.createWriteStream(sFileNameUntar);
+			tarStream.pipe(fsFileOutTar);
+		}
+		tarStream.on("end", function() { tarNext(); }); // ready for next entry
+		tarStream.resume(); // just auto drain the stream
+	});
+	// tarNext not defined as we're dealing with single files
+	//noinspection JSUnresolvedFunction
+	tarExtract.on("error", function(e)
+	{
+		++oA.ERRORS;
+		var sERR = e.toString();
+		if (-1 !== sERR.indexOf("Error: ")) { sERR = sERR.split("Error: ", sERR.length-7).join(""); }
+		v.error = sERR;
+		v.available = false;
+		if (++oA.MOVED === oA.fileso.length) { BroadCastUpdate(); }
+	});
+	//noinspection JSUnresolvedFunction
+	tarExtract.on("finish", function() { v.available = true; });
+	var fsFileInTar = mFS.createReadStream(v.gunzippath).pipe(tarExtract);
+}
+
 /** consulre function for decompression post move / write of final write */
 function clMoveFile(v)
 {
@@ -226,7 +309,7 @@ function clMoveFile(v)
 			++oA.ERRORS;
 			var sERR = err.toString();
 			if (-1 !== sERR.indexOf("Error: ")) { sERR = sERR.split("Error: ", sERR.length-7).join(""); }
-			v.error = sERR ;
+			v.error = sERR;
 			v.available = false;
 			if (++oA.MOVED === oA.fileso.length) { BroadCastUpdate(); }
 		}
@@ -237,16 +320,18 @@ function clMoveFile(v)
 				var sSourceFile = (UID !== v.writepath) ? v.writepath : v.filename;
 				var sWriteFile = (UID !== v.gunzippath) ? v.gunzippath
 					: ( (UID !== v.writepath) ? v.writepath.split(v.filename)[0] : "" ) + v.filename.split(".gz")[0];
+
 				//noinspection JSUnresolvedFunction
 				var fsFileIn = mFS.createReadStream(sSourceFile);
 				//noinspection JSUnresolvedFunction
 				var fsFileOut = mFS.createWriteStream(sWriteFile);
+
 				fsFileOut.on("error", function (e)
 				{
 					++oA.ERRORS;
 					var sERR = e.toString();
 					if (-1 !== sERR.indexOf("Error: ")) { sERR = sERR.split("Error: ", sERR.length-7).join(""); }
-					v.error = sERR ;
+					v.error = sERR;
 					v.available = false;
 				});
 				fsFileIn.on("error", function (e)
@@ -254,25 +339,36 @@ function clMoveFile(v)
 					++oA.ERRORS;
 					var sERR = e.toString();
 					if (-1 !== sERR.indexOf("Error: ")) { sERR = sERR.split("Error: ", sERR.length-7).join(""); }
-					v.error = sERR ;
+					v.error = sERR;
 					v.available = false;
 				});
+
 				//noinspection JSUnresolvedFunction
 				fsFileIn.pipe(mZLIB.createGunzip()).pipe(fsFileOut)
 				.on("finish", function()
 				{
-					v.available = true;
-					if (++oA.MOVED === oA.fileso.length) { BroadCastUpdate(); }
+					// verify expected file extensions after gunzup
+					if (!fsFileOut.path.length == fsFileOut.path.indexOf(oA.files_gzp_match) + oA.files_gzp_match.length)
+					{
+						var sERR = "ISSUE with "+sCR+v.filename+sCN+" expected extension: "+oA.files_gzp_match+" - does not match after gunzip.\n";
+						++oA.ERRORS;
+						v.error = sERR;
+						v.available = false;
+						if (++oA.MOVED === oA.fileso.length) { BroadCastUpdate(); }
+					}
+					// untar file if required.
+					if (oA.guntar) { clUntarFile(v); }
 				})
 				.on("error", function(e)
 				{
 					++oA.ERRORS;
 					var sERR = e.toString();
 					if (-1 !== sERR.indexOf("Error: ")) { sERR = sERR.split("Error: ", sERR.length-7).join(""); }
-					v.error = sERR ;
+					v.error = sERR;
 					v.available = false;
 					if (++oA.MOVED === oA.fileso.length) { BroadCastUpdate(); }
 				});
+
 			}
 			else { if (++oA.MOVED === oA.fileso.length) { BroadCastUpdate(); } }
 		}
@@ -289,10 +385,10 @@ function tickComplete()
 		iLRemoved=0;
 		if (0 === oA.ERRORS)
 		{
-			if (bInstall) { sMSG="\nALL: "+oA.fileso.length+" <- Maxmind DB files ALREADY INSTALLED & upto date @ "+new Date()+"\n"; }
-			else { sMSG="\nNo changes to: "+oA.fileso.length+" files @ "+new Date();  }
+			if (bInstall) { sMSG="\nALL: "+oA.fileso.length+" <- Maxmind DB files ALREADY INSTALLED & upto date @: "+new Date()+"\n"; }
+			else { sMSG="\nNo changes to: "+oA.fileso.length+" files @ "+new Date(); }
 		}
-		else { sMSG="\nERRORS: Completed with ISSUES :-( @ : " + new Date() +"\n"; }
+		else { sMSG="\nERRORS: Completed with ISSUES :-( @: " + new Date() +"\n"; }
 	}
 	else
 	{
@@ -338,7 +434,7 @@ function DownloadCheck(v, res)
 		var sERR = e.toString();
 		if (-1 !== sERR.indexOf("Error: ")) { sERR = sERR.split("Error: ", sERR.length-7).join(""); }
 		++oA.ERRORS;
-		oA.fileso[v].error = sERR ;
+		oA.fileso[v].error = sERR;
 		oA.fileso[v].downloaded = false;
 	});
 
@@ -348,11 +444,11 @@ function DownloadCheck(v, res)
 		{
 			ioFile.write(d);
 			oA.fileso[v].downloaded = true;
-			if (bInstall && 0===iS) { log("\nINITIATING DL PROCESS 4m: maxmind.com...\n"); }
-			if (0!==++iS%iSep1) { return ; }
+			if (bInstall && 0===iS) { log("\nINITIATING DOWNLOAD: " + sCB + oA.urlroot + sCN + " ...\n"); }
+			if (0!==++iS%iSep1) { return; }
 
 			if (0 === iS%iSep2)
-			{	//console.log("iS%iSep2 == %s   -- %s % %s", iS%iSep2, iS, iSep2);
+			{	// to see rate log: ("iS%iSep2 == %s	-- %s % %s", iS%iSep2, iS, iSep2);
 				iSep2+=3;
 				if (sP.length < 320) { sP = sP.replace(sS0, sS5)+sCB+sCNB+sS0; }
 			}
@@ -410,27 +506,30 @@ function clHttpParse(v)
 {
 	return function(res)
 	{
-		if ("application/octet-stream" !== res.headers["content-type"])
+		if ("application/gzip" !== res.headers["content-type"] && "application/octet-stream" !== res.headers["content-type"])
 		{
 			++oA.ERRORS;
 			oA.fileso[v].validurl = false;
 			oA.fileso[v].downloaded = false;
 			oA.fileso[v].available = false;
-			oA.fileso[v].error = "INVALID return type for: " + oA.fileso[v].filename + " @ :" + new Date();
+			oA.fileso[v].error = (200 !== res.statusCode ) ? "INVALID " + sCR + "HTTP: " + res.statusCode + " response" + sCN + " & return type for " : "INVALID return type for: ";
+			oA.fileso[v].error += oA.fileso[v].filename + " @: " + new Date() + "\n";
 			if (!bForked) { log(oA.fileso[v].error); }
 			DecrementLookups(v);
 		}
 		else
 		{
+			oA.fileso[v].size = parseInt(res.headers["content-length"]);
 			oA.fileso[v].validurl = true;
 			/* Check whether files is present via e-tag histotry or is already at location - otherwise download */
-			if (oA.fileso[v].etag !== res.headers.etag) { DownloadCheck(v, res); }
+			if(UID === oA.fileso[v].etag && oA.fileso[v].size !== res.headers.size || oA.fileso[v].etag !== res.headers.etag) { DownloadCheck(v, res); }
 			else
 			{	//noinspection JSUnresolvedFunction
 				mFS.realpath(oA.fileso[v].writepath, clGetFile(v, res));
 			}
 		}
-		res.on("end", function(){ if (bChange) { DecrementLookups(v);/*log("Finished: "+oA.fileso[v].filename);*/ } });
+		//if ("application/xml; charset=UTF-8" !== res.headers["content-type"])
+		res.on("end", function(){ if (bChange) { DecrementLookups(v); } });
 	};
 }
 
@@ -450,7 +549,7 @@ function clHttpError(v)
 /** Ensure required write path is present */
 function InitPaths()
 {
-	if (UID === oA.writedir) { return ; }
+	if (UID === oA.writedir) { return; }
 	//noinspection JSUnresolvedFunction
 	mFS.mkdir(oA.writedir, function(e)
 	{
@@ -478,7 +577,13 @@ function InitLoad()
 		{
 			for (var iY=0; iY < oA.fileso.length; ++iY)
 			{
-				if (oldFiles[iX].path === oA.fileso[iY].path){ oA.fileso[iY].etag = oldFiles[iX].etag; ++iEtags; break;  }
+				if (oldFiles[iX].path === oA.fileso[iY].path)
+				{
+					oA.fileso[iY].size = oldFiles[iX].size;
+					oA.fileso[iY].etag = oldFiles[iX].etag;
+					++iEtags;
+					break;
+				}
 			}
 		}
 		return !(oldFiles.length === iEtags);
@@ -486,9 +591,9 @@ function InitLoad()
 	else return true;
 }
 var bFirstRun = true;
-/*¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯*/
-/** MAIN INIT                         */
-/*____________________________________*/
+/*¯¯¯¯¯¯¯¯¯¯¯¯¯*/
+/** MAIN INIT **/
+/*_____________*/
 /**
  * @return {number} potential exit code
  */
@@ -496,7 +601,8 @@ function Init(oAR)
 {
 	if (0 !== iERROR) { console.log("BAD ENVIROMENT, SERIOUS ISSUES or CLIENT AGENT!\n"); return 1; }
 	if (UID !== oAR) { oA = oAR; }
-	var sRequire =  (-1 !== oA.urlroot.indexOf("https") || -1 !== oA.urlroot.indexOf(":443")) ? "https" : "http";
+	var sRequire = (-1 !== oA.urlroot.indexOf("https://") || -1 !== oA.urlroot.indexOf(":443")) ? "https" : "http";
+	if ("https" == sRequire) { sPort = 443; }
 	mHTTP = require(sRequire);
 	aColons = oA.urlroot.indexOfAll(":");
 	/* where no ':' then its plain scheme otherwise try to match */
@@ -509,7 +615,7 @@ function Init(oAR)
 	}
 	/* remove starting '//' for pure DNS string */
 	var iCol = oA.urlroot.indexOf("//");
-	if (-1 !== iCol && 0 !== iCol){ oA.urlroot = oA.urlroot.split("//")[1]; }
+	if (-1 !== iCol && 0 !== iCol) { oA.urlroot = oA.urlroot.split("//")[1]; }
 	if (UID === oA.fileso) { oA.fileso = []; }
 	oOption = { "hostname" : oA.urlroot, "port" : sPort, "method" : "GET" };
 	/* construct requests objects if not already set */
@@ -519,18 +625,29 @@ function Init(oAR)
 		{
 			var oFileO = JSON.parse(JSON.stringify(oOption));
 			var sFileName;
-			if (-1 === oA.files[iX].indexOf("/")) { sFileName = oA.files[iX]; }
-			else
-			{
-				sFileName = oA.files[iX].split("/");
-				sFileName = sFileName[sFileName.length-1];
-			}
+			if (UID === oA.writedir_appends) { sFileName = oA.files[iX]; }
+			else { sFileName = oA.writedir_appends[iX].slice(1, oA.writedir_appends[iX].length) + "_" + oA.files[iX]; }
+
 			if (UID !== oA.gunzip && oA.gunzip) { oFileO.gunzip = true; }
 			oFileO.downloaded = false;
 			oFileO.filename = sFileName;
-			oFileO.path = oA.urlappend+oA.files[iX];
-			oFileO.writepath = oA.writedir+"/"+oFileO.filename;
-			oFileO.gunzippath = oA.writedir+"/"+oFileO.filename.split(".gz")[0];
+
+			if (UID !== oA.urlappends) { oFileO.path = oA.urlappend + oA.urlappends[iX] + "/"; }
+			else oFileO.path = oA.urlappend;
+
+			// where we have files_query_string then dont append file names to path.
+			if ("" !== oA.files_query_string){ oFileO.path+=oA.files_query_string + oA.files[iX]; }
+			else { oFileO.path+=oA.files[iX]; }
+
+			if ("" !== oA.query_strings) { oFileO.path+=oA.query_strings; }
+			
+			// append output paths like urls
+			if (UID === oA.writedir_appends) { oFileO.writepath = oA.writedir+"/"+oFileO.filename; }
+			else { oFileO.writepath = oA.writedir+ oA.writedir_appends[iX] + "/" + oFileO.filename; }
+			
+			// change name of output file if contained archive is not correctly named.
+			if (UID === oA.outfiles) { oFileO.gunzippath = oA.writedir+"/"+oFileO.filename.split(".gz")[0]; }
+			else { oFileO.gunzippath = oA.writedir+"/"+oA.outfiles[iX]; }
 			oA.fileso.push(oFileO);
 		}
 	}
@@ -538,9 +655,10 @@ function Init(oAR)
 	InitPaths();
 	if (InitLoad())
 	{
-		/* DO requests for all fileso... */
+		// DO requests for all fileso...
 		for (iX=0; iX < oA.fileso.length; ++iX)
 		{	//noinspection JSUnresolvedFunction
+			oA.fileso[iX]["headers"] = { "Accept" : "*/*" };
 			var req = mHTTP.request(oA.fileso[iX], clHttpParse(iX));
 			req.on("error", clHttpError(iX)); req.end(0);
 		}
@@ -553,18 +671,18 @@ function Init(oAR)
 	}
 } //Init(oA);
 
-/*¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯*/
-/** TIMER BASED RE-RUN TO UPDATE      */
-/*____________________________________*/
+/*¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯*/
+/** TIMER BASED RE-RUN TO UPDATE */
+/*_______________________________*/
 function updateOnTimer()
 {
 	var fTimer = function (){ /*log("oA ==== \n" +JSON.stringify(oA));*/ Init(oA); };
 	setInterval(fTimer, iSecondsUpdate);
 }
 
-/*¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯*/
-/** NPM INSTALL                       */
-/*____________________________________*/
+/*¯¯¯¯¯¯¯¯¯¯¯¯¯¯*/
+/** NPM INSTALL */
+/*______________*/
 if (-1 !== process.argv.indexOf("--install") || -1 !== process.argv.indexOf("-i"))
 {
 	bInstall = true;
@@ -584,5 +702,5 @@ if (-1 !== process.argv.indexOf("--install") || -1 !== process.argv.indexOf("-i"
 		oA.json = sDBPath+oA.json;
 	}
 	else { oA.json = oA.writedir+"/"+oA.json; }
-	oA.update = false ; Init(oA);
+	oA.update = false; Init(oA);
 }
