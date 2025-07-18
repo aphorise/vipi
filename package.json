@@ -67,6 +67,7 @@
 		"x64",
 		"ia32",
 		"arm",
+		"arm64",
 		"mips"
 	],
 	"engine": {
