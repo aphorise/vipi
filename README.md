@@ -334,7 +334,7 @@ This type of testing is limited by the servomechanism of `loopback` (`127.0.0.1`
 
 
 ### Version
-0.0.4
+0.0.5
 
 
 License

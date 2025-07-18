@@ -1,3 +1,9 @@
+### `0.0.5` / 2025-07-18
+
+  * Added arm64 to packge.json to support macos
+
+
+------------------------------------------
 ### `0.0.4` / 2022-08-04
 
   * Added alternative URL for legacy v1 `.db` files - Maxmind only support v2 .mmdb support now.
